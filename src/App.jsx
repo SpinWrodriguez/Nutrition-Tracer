@@ -396,10 +396,18 @@ export default function App() {
     if (editItemIdx !== null) {
       setEditIdx(editItemIdx);
       const items = toArr(data.selections[day]?.[slot]);
-      const v = items[editItemIdx];
-      const o = one(v);
+      const o = one(items[editItemIdx]);
       if (o && !o.skip) {
-        setDraft({ custom:true, n:o.n, k:o.k, p:o.p, c:o.c, f:o.f });
+        if (o._base) {
+          // Restore serving adjuster — item was added from AFCD/USDA
+          setPick({ name: o.n, kcal: o._base.kcal, p: o._base.p, c: o._base.c, f: o._base.f,
+            servingSize: o._servingSize, servingLabel: o._servingLabel });
+          setGrams(String(o._servingG || 100));
+          setIsLiquid(o._isLiquid || false);
+        } else {
+          // Fallback: simple macro editor
+          setDraft({ custom:true, n:o.n, k:o.k, p:o.p, c:o.c, f:o.f });
+        }
       }
     }
   };
@@ -921,7 +929,14 @@ export default function App() {
                       <div style={{ ...NF, fontSize:13, color:T.accentSoft, marginBottom:10 }}>
                         {scaledDraft.k} kcal · {scaledDraft.p}g P · {scaledDraft.c}g C · {scaledDraft.f}g F
                       </div>
-                      <button onClick={() => confirmItem(open, scaledDraft)}
+                      <button onClick={() => confirmItem(open, {
+                        ...scaledDraft,
+                        _base: { kcal: pick.kcal, p: pick.p, c: pick.c, f: pick.f },
+                        _servingG: Math.max(1, parseFloat(grams) || 100),
+                        _isLiquid: isLiquid,
+                        _servingSize: pick.servingSize,
+                        _servingLabel: pick.servingLabel,
+                      })}
                         style={{ width:'100%', padding:'13px', borderRadius:12, border:'none',
                           background:T.accent, color:'#fff', fontSize:14, fontWeight:600, cursor:'pointer',
                           display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
