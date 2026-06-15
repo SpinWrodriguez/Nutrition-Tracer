@@ -542,23 +542,15 @@ export default function App() {
                   boxShadow:'0 1px 6px rgba(0,0,0,0.05)',
                   borderLeft:`4px solid ${isChk ? T.ok : T.border}` }}>
 
-                  {/* meal photo banner */}
+                  {/* meal photo banner — only when photo exists or generating */}
                   {photo ? (
                     <PhotoBanner photo={photo} onRemove={() => removeSlotPhoto(s.key)} />
                   ) : generatingSlot === s.key ? (
-                    <div style={{ height:80, background:T.goldLight, borderTopLeftRadius:14, borderTopRightRadius:14,
+                    <div style={{ height:70, background:T.goldLight, borderTopLeftRadius:14, borderTopRightRadius:14,
                       display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
                       <Wand2 size={15} color={T.gold} />
                       <span style={{ fontSize:12, color:T.gold, fontWeight:600 }}>Generating photo…</span>
                     </div>
-                  ) : hasFood ? (
-                    <button onClick={() => handleGeneratePhoto(s.key)}
-                      style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'center',
-                        gap:6, padding:'8px', background:T.goldLight, border:'none',
-                        borderTopLeftRadius:14, borderTopRightRadius:14, cursor:'pointer',
-                        color:T.gold, fontSize:12, fontWeight:600 }}>
-                      <Wand2 size={12} /> Generate meal photo
-                    </button>
                   ) : null}
 
                   <div style={{ padding:'14px 14px 12px' }}>
@@ -609,14 +601,31 @@ export default function App() {
                         )}
                       </div>
 
-                      {/* check button */}
-                      <button onClick={() => toggleCheck(s.key)}
-                        style={{ flexShrink:0, width:44, height:44, borderRadius:13,
-                          border:`2px solid ${isChk ? T.ok : T.border}`,
-                          background:isChk ? T.ok : 'transparent',
-                          cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                        {isChk && <Check size={20} color="#fff" strokeWidth={2.5} />}
-                      </button>
+                      {/* right-side buttons */}
+                      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:6, flexShrink:0 }}>
+                        {/* check button */}
+                        <button onClick={() => toggleCheck(s.key)}
+                          style={{ width:44, height:44, borderRadius:13,
+                            border:`2px solid ${isChk ? T.ok : T.border}`,
+                            background:isChk ? T.ok : 'transparent',
+                            cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                          {isChk && <Check size={20} color="#fff" strokeWidth={2.5} />}
+                        </button>
+                        {/* generate photo button — only when there's food */}
+                        {hasFood && !photo && (
+                          <button onClick={() => handleGeneratePhoto(s.key)}
+                            disabled={!!generatingSlot}
+                            title="Generate meal photo"
+                            style={{ width:44, height:32, borderRadius:10,
+                              border:`1.5px solid ${T.gold}`,
+                              background:T.goldLight,
+                              cursor: generatingSlot ? 'default' : 'pointer',
+                              display:'flex', alignItems:'center', justifyContent:'center',
+                              opacity: generatingSlot ? 0.5 : 1 }}>
+                            <Wand2 size={14} color={T.gold} />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
 
