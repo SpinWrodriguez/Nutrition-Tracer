@@ -126,28 +126,14 @@ async function generateFoodPhoto(foodDesc) {
   const res = await fetch('https://api.openai.com/v1/images/generations', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_KEY}` },
-    body: JSON.stringify({ model: 'dall-e-2', prompt, n: 1, size: '512x512' }),
+    body: JSON.stringify({ model: 'gpt-image-2', prompt, n: 1, size: '1024x1024' }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error?.message || `HTTP ${res.status}`);
-  const url = data.data?.[0]?.url;
-  if (!url) throw new Error('No image URL returned');
-
-  // Fetch the image and convert to compressed base64 so it persists in localStorage
-  try {
-    const imgRes = await fetch(url);
-    const blob = await imgRes.blob();
-    const raw = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-    return await compressImage(raw, 480, 0.72);
-  } catch {
-    // CORS blocked — store the temporary URL directly (expires ~1hr)
-    return url;
-  }
+  // gpt-image-2 returns b64_json by default
+  const b64 = data.data?.[0]?.b64_json;
+  if (!b64) throw new Error(`Unexpected response: ${JSON.stringify(data).slice(0, 200)}`);
+  return await compressImage(`data:image/png;base64,${b64}`, 480, 0.72);
 }
 
 function freshData() {
