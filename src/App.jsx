@@ -122,7 +122,7 @@ async function compressImage(dataUrl, maxWidth = 600, quality = 0.65) {
 const OPENAI_KEY = import.meta.env.VITE_OPENAI_KEY;
 
 async function generateFoodPhoto(foodDesc) {
-  const prompt = `Professional food photography of ${foodDesc}, plated on a white dish, restaurant quality, studio lighting, appetizing, shallow depth of field. Photo only, no text.`;
+  const prompt = `A photo of ${foodDesc}`;
   const res = await fetch('https://api.openai.com/v1/images/generations', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_KEY}` },
