@@ -31,6 +31,7 @@ jobs:
         env:
           VITE_GEMINI_KEY: ${{ secrets.VITE_GEMINI_KEY }}
           VITE_USDA_KEY: ${{ secrets.VITE_USDA_KEY }}
+          VITE_OPENAI_KEY: ${{ secrets.VITE_OPENAI_KEY }}
       - uses: actions/configure-pages@v4
       - uses: actions/upload-pages-artifact@v3
         with:

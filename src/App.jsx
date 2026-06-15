@@ -118,39 +118,22 @@ async function compressImage(dataUrl, maxWidth = 600, quality = 0.65) {
   });
 }
 
-/* ── fetch food photo from Wikipedia (free, no key, ~every food has an article) ── */
-const SKIP_WORDS = new Set(['with','from','plus','half','white','black','brown','big','lean','grilled','fried','baked','fresh','organic','sliced']);
-
-async function wikiPhoto(word) {
-  const res = await fetch(
-    `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(word)}&prop=pageimages&format=json&pithumbsize=500&origin=*`
-  );
-  const data = await res.json();
-  const page = Object.values(data.query?.pages || {})[0];
-  if (page && page.pageid !== -1 && page.thumbnail?.source) return page.thumbnail.source;
-  return null;
-}
+/* ── generate food photo with DALL-E 3 ── */
+const OPENAI_KEY = import.meta.env.VITE_OPENAI_KEY;
 
 async function generateFoodPhoto(foodDesc) {
-  // Extract candidate words from first food item, skipping filler words
-  const firstItem = foodDesc.split(',')[0];
-  const words = firstItem
-    .replace(/[()&+½\/\d]/g, ' ')
-    .split(/\s+/)
-    .map(w => w.trim())
-    .filter(w => w.length > 3 && !SKIP_WORDS.has(w.toLowerCase()));
-
-  // Try each candidate word against Wikipedia
-  for (const word of words) {
-    const url = await wikiPhoto(word);
-    if (url) return url;
-  }
-
-  // Last resort: try the raw first item
-  const url = await wikiPhoto(firstItem.trim());
-  if (url) return url;
-
-  throw new Error(`No photo found — try the camera instead`);
+  const prompt = `Professional food photography of ${foodDesc}, plated on a white dish, restaurant quality, studio lighting, appetizing, shallow depth of field. Photo only, no text.`;
+  const res = await fetch('https://api.openai.com/v1/images/generations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_KEY}` },
+    body: JSON.stringify({ model: 'dall-e-3', prompt, n: 1, size: '1024x1024', quality: 'standard', response_format: 'b64_json' }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || `HTTP ${res.status}`);
+  const b64 = data.data?.[0]?.b64_json;
+  if (!b64) throw new Error('No image returned');
+  // Compress 1024×1024 PNG down to a storable size before saving to localStorage
+  return await compressImage(`data:image/png;base64,${b64}`, 480, 0.72);
 }
 
 function freshData() {
