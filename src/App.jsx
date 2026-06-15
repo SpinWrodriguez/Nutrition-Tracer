@@ -1007,46 +1007,19 @@ export default function App() {
 
 /* ── sub-components ── */
 function PhotoBanner({ photo, onRemove }) {
-  const [status, setStatus] = useState('loading');
-
-  useEffect(() => { setStatus('loading'); }, [photo]);
-
   return (
-    <div style={{ position:'relative', height:140, background:T.border,
-      borderTopLeftRadius:14, borderTopRightRadius:14, overflow:'hidden' }}>
-      {status === 'loading' && (
-        <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column',
-          alignItems:'center', justifyContent:'center', gap:6, background:T.goldLight }}>
-          <Wand2 size={18} color={T.gold} />
-          <span style={{ fontSize:11, color:T.gold, fontWeight:600 }}>Generating photo…</span>
-        </div>
-      )}
-      {status === 'error' && (
-        <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column',
-          alignItems:'center', justifyContent:'center', gap:4, background:T.border }}>
-          <span style={{ fontSize:12, color:T.muted }}>Photo unavailable</span>
-          <button onClick={onRemove}
-            style={{ fontSize:11, color:T.accentSoft, background:'none', border:'none', cursor:'pointer', textDecoration:'underline' }}>
-            remove
-          </button>
-        </div>
-      )}
+    <div style={{ position:'relative', borderTopLeftRadius:14, borderTopRightRadius:14, overflow:'hidden' }}>
       <img
         src={photo}
         alt="meal"
-        onLoad={() => setStatus('loaded')}
-        onError={() => setStatus('error')}
-        style={{ width:'100%', height:'100%', objectFit:'cover',
-          display: status === 'loaded' ? 'block' : 'none' }}
+        style={{ width:'100%', height:140, objectFit:'cover', display:'block' }}
       />
-      {status === 'loaded' && (
-        <button onClick={onRemove}
-          style={{ position:'absolute', top:6, right:6, background:'rgba(0,0,0,0.5)',
-            border:'none', borderRadius:'50%', width:26, height:26, cursor:'pointer',
-            display:'flex', alignItems:'center', justifyContent:'center' }}>
-          <X size={13} color="#fff" />
-        </button>
-      )}
+      <button onClick={onRemove}
+        style={{ position:'absolute', top:6, right:6, background:'rgba(0,0,0,0.5)',
+          border:'none', borderRadius:'50%', width:26, height:26, cursor:'pointer',
+          display:'flex', alignItems:'center', justifyContent:'center' }}>
+        <X size={13} color="#fff" />
+      </button>
     </div>
   );
 }
