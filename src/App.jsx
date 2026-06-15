@@ -126,14 +126,28 @@ async function generateFoodPhoto(foodDesc) {
   const res = await fetch('https://api.openai.com/v1/images/generations', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_KEY}` },
-    body: JSON.stringify({ model: 'dall-e-3', prompt, n: 1, size: '1024x1024', quality: 'standard', response_format: 'b64_json' }),
+    body: JSON.stringify({ model: 'dall-e-3', prompt, n: 1, size: '1024x1024', quality: 'standard' }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error?.message || `HTTP ${res.status}`);
-  const b64 = data.data?.[0]?.b64_json;
-  if (!b64) throw new Error('No image returned');
-  // Compress 1024×1024 PNG down to a storable size before saving to localStorage
-  return await compressImage(`data:image/png;base64,${b64}`, 480, 0.72);
+  const url = data.data?.[0]?.url;
+  if (!url) throw new Error('No image URL returned');
+
+  // Fetch the image and convert to compressed base64 so it persists in localStorage
+  try {
+    const imgRes = await fetch(url);
+    const blob = await imgRes.blob();
+    const raw = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    return await compressImage(raw, 480, 0.72);
+  } catch {
+    // CORS blocked — store the temporary URL directly (expires ~1hr)
+    return url;
+  }
 }
 
 function freshData() {
