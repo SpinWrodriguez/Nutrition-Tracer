@@ -120,9 +120,11 @@ async function compressImage(dataUrl, maxWidth = 600, quality = 0.65) {
 
 /* ── generate food photo URL via pollinations.ai ── */
 function makeFoodPhotoUrl(foodDesc) {
-  const prompt = `professional food photography, ${foodDesc}, white plate, restaurant quality, studio lighting, appetizing`;
+  // Strip special chars, use simple words joined with +
+  const clean = foodDesc.replace(/[^a-zA-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  const prompt = `food+photography+${clean.split(' ').join('+')}+plated+meal+appetizing+high+quality`;
   const seed = foodDesc.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % 9999;
-  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=400&height=240&nologo=true&seed=${seed}`;
+  return `https://image.pollinations.ai/prompt/${prompt}?width=400&height=240&nologo=true&seed=${seed}&model=flux`;
 }
 
 function freshData() {
@@ -439,6 +441,7 @@ export default function App() {
     const items = toArr(sel[slotKey]);
     const names = items.filter(v => one(v) && !one(v)?.skip).map(v => one(v).n).join(', ');
     if (!names) return;
+    // Set URL immediately — PhotoBanner component shows spinner while it loads
     setSlotPhoto(slotKey, makeFoodPhotoUrl(names));
   };
 
@@ -525,17 +528,7 @@ export default function App() {
 
                   {/* meal photo banner */}
                   {photo ? (
-                    <div style={{ position:'relative' }}>
-                      <img src={photo} alt={s.label}
-                        style={{ width:'100%', height:140, objectFit:'cover',
-                          borderTopLeftRadius:14, borderTopRightRadius:14 }} />
-                      <button onClick={() => removeSlotPhoto(s.key)}
-                        style={{ position:'absolute', top:6, right:6, background:'rgba(0,0,0,0.5)',
-                          border:'none', borderRadius:'50%', width:26, height:26, cursor:'pointer',
-                          display:'flex', alignItems:'center', justifyContent:'center' }}>
-                        <X size={13} color="#fff" />
-                      </button>
-                    </div>
+                    <PhotoBanner photo={photo} onRemove={() => removeSlotPhoto(s.key)} />
                   ) : hasFood ? (
                     <button onClick={() => handleGeneratePhoto(s.key)}
                       style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'center',
@@ -971,6 +964,51 @@ export default function App() {
 }
 
 /* ── sub-components ── */
+function PhotoBanner({ photo, onRemove }) {
+  const [status, setStatus] = useState('loading');
+
+  useEffect(() => { setStatus('loading'); }, [photo]);
+
+  return (
+    <div style={{ position:'relative', height:140, background:T.border,
+      borderTopLeftRadius:14, borderTopRightRadius:14, overflow:'hidden' }}>
+      {status === 'loading' && (
+        <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column',
+          alignItems:'center', justifyContent:'center', gap:6, background:T.goldLight }}>
+          <Wand2 size={18} color={T.gold} />
+          <span style={{ fontSize:11, color:T.gold, fontWeight:600 }}>Generating photo…</span>
+        </div>
+      )}
+      {status === 'error' && (
+        <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column',
+          alignItems:'center', justifyContent:'center', gap:4, background:T.border }}>
+          <span style={{ fontSize:12, color:T.muted }}>Photo unavailable</span>
+          <button onClick={onRemove}
+            style={{ fontSize:11, color:T.accentSoft, background:'none', border:'none', cursor:'pointer', textDecoration:'underline' }}>
+            remove
+          </button>
+        </div>
+      )}
+      <img
+        src={photo}
+        alt="meal"
+        onLoad={() => setStatus('loaded')}
+        onError={() => setStatus('error')}
+        style={{ width:'100%', height:'100%', objectFit:'cover',
+          display: status === 'loaded' ? 'block' : 'none' }}
+      />
+      {status === 'loaded' && (
+        <button onClick={onRemove}
+          style={{ position:'absolute', top:6, right:6, background:'rgba(0,0,0,0.5)',
+            border:'none', borderRadius:'50%', width:26, height:26, cursor:'pointer',
+            display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <X size={13} color="#fff" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 function MacroGauge({ icon, label, value, goal, unit, color }) {
   const pct = Math.min(100, goal ? (value/goal)*100 : 0);
   return (
