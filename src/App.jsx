@@ -118,21 +118,39 @@ async function compressImage(dataUrl, maxWidth = 600, quality = 0.65) {
   });
 }
 
-/* ── fetch food photo from TheMealDB (free, no key) ── */
-async function generateFoodPhoto(foodDesc) {
-  // Try progressively shorter/simpler search terms until a photo is found
-  const firstItem = foodDesc.split(',')[0].trim();
-  const keywords = firstItem.replace(/[()&+½]/g, ' ').split(/\s+/).filter(w => w.length > 3);
-  const queries = [firstItem, ...keywords];
+/* ── fetch food photo from Wikipedia (free, no key, ~every food has an article) ── */
+const SKIP_WORDS = new Set(['with','from','plus','half','white','black','brown','big','lean','grilled','fried','baked','fresh','organic','sliced']);
 
-  for (const q of queries) {
-    try {
-      const res = await fetch(`https://www.themealdb.com/api/json/v1/1/search.php?s=${encodeURIComponent(q)}`);
-      const data = await res.json();
-      if (data.meals?.[0]?.strMealThumb) return data.meals[0].strMealThumb;
-    } catch {}
+async function wikiPhoto(word) {
+  const res = await fetch(
+    `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(word)}&prop=pageimages&format=json&pithumbsize=500&origin=*`
+  );
+  const data = await res.json();
+  const page = Object.values(data.query?.pages || {})[0];
+  if (page && page.pageid !== -1 && page.thumbnail?.source) return page.thumbnail.source;
+  return null;
+}
+
+async function generateFoodPhoto(foodDesc) {
+  // Extract candidate words from first food item, skipping filler words
+  const firstItem = foodDesc.split(',')[0];
+  const words = firstItem
+    .replace(/[()&+½\/\d]/g, ' ')
+    .split(/\s+/)
+    .map(w => w.trim())
+    .filter(w => w.length > 3 && !SKIP_WORDS.has(w.toLowerCase()));
+
+  // Try each candidate word against Wikipedia
+  for (const word of words) {
+    const url = await wikiPhoto(word);
+    if (url) return url;
   }
-  throw new Error(`No photo found for "${firstItem}" — try the camera instead`);
+
+  // Last resort: try the raw first item
+  const url = await wikiPhoto(firstItem.trim());
+  if (url) return url;
+
+  throw new Error(`No photo found — try the camera instead`);
 }
 
 function freshData() {
