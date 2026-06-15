@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Check, Plus, Flame, Dumbbell, Scale, RotateCcw, Trophy, Sparkles, Database, X, Star, Camera } from 'lucide-react';
+import { Check, Plus, Flame, Dumbbell, Scale, RotateCcw, Trophy, Sparkles, Database, X, Star, Camera, Pencil, Wand2, Droplets } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from 'recharts';
 import { AFCD } from './afcd.js';
 
@@ -18,6 +18,7 @@ const T = {
   goldLight: '#FAF4E4',
   ok: '#2A7A50',
   over: '#C0392B',
+  blue: '#1A4A7A',
 };
 const NF = { fontFamily: "'Oswald','Arial Narrow',system-ui,sans-serif", fontVariantNumeric: 'tabular-nums' };
 const sf = { fontFamily: 'ui-sans-serif,system-ui,sans-serif' };
@@ -100,18 +101,42 @@ const isSkipOnly = items => {
   return arr.length === 0 || arr.every(v => one(v)?.skip);
 };
 
+/* ── image compression (for camera photos before storing) ── */
+async function compressImage(dataUrl, maxWidth = 600, quality = 0.65) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxWidth / img.width);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+/* ── generate food photo URL via pollinations.ai ── */
+function makeFoodPhotoUrl(foodDesc) {
+  const prompt = `professional food photography, ${foodDesc}, white plate, restaurant quality, studio lighting, appetizing`;
+  const seed = foodDesc.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % 9999;
+  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=400&height=240&nologo=true&seed=${seed}`;
+}
+
 function freshData() {
   return {
     selections: JSON.parse(JSON.stringify(DEFAULTS)),
     checked: DAYS.reduce((a,d) => (a[d.id]={}, a), {}),
     weights: [],
+    photos: DAYS.reduce((a,d) => (a[d.id]={}, a), {}),
   };
 }
 
 function normalizeData(raw) {
   const d = freshData();
   if (!raw) return d;
-  // migrate selections: ensure each slot is an array
   DAYS.forEach(day => {
     SLOTS.forEach(sl => {
       const v = raw.selections?.[day.id]?.[sl.key] ?? DEFAULTS[day.id][sl.key];
@@ -120,10 +145,16 @@ function normalizeData(raw) {
   });
   d.checked = { ...d.checked, ...(raw.checked || {}) };
   d.weights = raw.weights || [];
+  d.photos = {};
+  DAYS.forEach(day => {
+    d.photos[day.id] = raw.photos?.[day.id] || {};
+  });
   return d;
 }
 
 /* ── USDA search ── */
+const LIQUID_UNITS = ['ml', 'mls', 'milliliter', 'millilitre', 'milliliters', 'millilitres'];
+
 async function searchUSDA(q) {
   const url = `https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${USDA_KEY}&query=${encodeURIComponent(q)}&pageSize=7`;
   const res = await fetch(url);
@@ -134,8 +165,9 @@ async function searchUSDA(q) {
     const branded = food.dataType === 'Branded';
     const sSize = food.servingSize;
     const sUnit = (food.servingSizeUnit || '').toLowerCase();
-    const isGrams = ['g', 'grm', 'gram', 'grams'].includes(sUnit);
-    const mul = branded && sSize && isGrams ? 100 / sSize : 1;
+    const isLiquid = LIQUID_UNITS.some(u => sUnit.includes(u));
+    const isGrams = ['g', 'grm', 'gram', 'grams'].includes(sUnit) || (!isLiquid && branded && sSize);
+    const mul = branded && sSize && (isGrams || isLiquid) ? 100 / sSize : 1;
     return {
       fdcId: food.fdcId,
       name: food.description,
@@ -143,8 +175,9 @@ async function searchUSDA(q) {
       p: get('203') * mul,
       c: get('205') * mul,
       f: get('204') * mul,
-      servingSize: branded && sSize && isGrams ? Math.round(sSize) : null,
+      servingSize: branded && sSize ? Math.round(sSize) : null,
       servingLabel: food.householdServingFullText || null,
+      isLiquid,
     };
   }).filter(f => f.kcal > 0);
 }
@@ -155,8 +188,9 @@ async function fetchUSDAfoodDetail(fdcId) {
   if (!res.ok) throw new Error('USDA detail error');
   const food = await res.json();
   const get = num => food.foodNutrients?.find(n => n.nutrient?.number === num)?.amount ?? 0;
-  // Branded foods use servingSize; SR Legacy/Foundation use foodPortions[0].gramWeight
   const portion = food.foodPortions?.[0];
+  const sUnit = (food.servingSizeUnit || '').toLowerCase();
+  const isLiquid = LIQUID_UNITS.some(u => sUnit.includes(u));
   const servingSize = food.servingSize
     ? Math.round(food.servingSize)
     : portion?.gramWeight ? Math.round(portion.gramWeight) : null;
@@ -169,13 +203,18 @@ async function fetchUSDAfoodDetail(fdcId) {
     f: get('204'),
     servingSize,
     servingLabel,
+    isLiquid,
   };
 }
 
 /* ── Gemini AI estimate ── */
 const GEMINI_KEY = import.meta.env.VITE_GEMINI_KEY;
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent';
-const NUTRITION_PROMPT = 'You are a nutrition estimator. Estimate calories and macros for the food shown, assuming typical real-world portions. Respond ONLY with a JSON object, no markdown: {"name":"label max 26 chars","k":<kcal int>,"p":<protein g int>,"c":<carbs g int>,"f":<fat g int>}';
+const GEMINI_HEADERS = { 'Content-Type': 'application/json', 'X-goog-api-key': GEMINI_KEY };
+
+const TEXT_NUTRITION_PROMPT = 'You are a precise nutrition expert. Look up or recall accurate nutrition data from USDA, NUTTAB, or standard databases for the described food. Return macros for the realistic serving size described (not per 100g unless specified). Respond ONLY with a JSON object, no markdown: {"name":"specific food name max 26 chars","k":<kcal int>,"p":<protein g int>,"c":<carbs g int>,"f":<fat g int>}';
+
+const IMAGE_NUTRITION_PROMPT = 'You are a precise nutrition expert. Examine this food image carefully: (1) Identify the SPECIFIC food or dish — be specific like "Big Mac" not just "burger". (2) Estimate the portion size using visual cues like plate size, utensils, or packaging. (3) Recall accurate USDA/database nutrition values for that exact food and portion. Return macros for the ENTIRE visible portion shown. Respond ONLY with a JSON object, no markdown: {"name":"specific food name max 26 chars","k":<kcal int>,"p":<protein g int>,"c":<carbs g int>,"f":<fat g int>}';
 
 function parseGeminiResponse(data, fallbackName) {
   const raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
@@ -186,13 +225,11 @@ function parseGeminiResponse(data, fallbackName) {
     c:Math.max(0,Math.round(+obj.c||0)), f:Math.max(0,Math.round(+obj.f||0)) };
 }
 
-const GEMINI_HEADERS = { 'Content-Type': 'application/json', 'X-goog-api-key': GEMINI_KEY };
-
 async function aiEstimate(text) {
   const res = await fetch(GEMINI_URL, {
     method: 'POST',
     headers: GEMINI_HEADERS,
-    body: JSON.stringify({ contents: [{ parts: [{ text: NUTRITION_PROMPT + '\nFood: ' + text }] }] }),
+    body: JSON.stringify({ contents: [{ parts: [{ text: TEXT_NUTRITION_PROMPT + '\nFood: ' + text }] }] }),
   });
   return parseGeminiResponse(await res.json(), text);
 }
@@ -202,7 +239,7 @@ async function aiEstimateFromImage(base64, mimeType) {
     method: 'POST',
     headers: GEMINI_HEADERS,
     body: JSON.stringify({ contents: [{ parts: [
-      { text: NUTRITION_PROMPT },
+      { text: IMAGE_NUTRITION_PROMPT },
       { inline_data: { mime_type: mimeType, data: base64 } },
     ]}] }),
   });
@@ -222,13 +259,13 @@ export default function App() {
   });
   const [day,   setDay]  = useState(todayId);
   const [tab,   setTab]  = useState('plan');
-  const [open,  setOpen] = useState(null); // null | slotKey — bottom sheet
+  const [open,  setOpen] = useState(null);
   const [wInput, setWInput] = useState('');
 
   // picker state
   const [query,    setQuery]    = useState('');
   const [hits,     setHits]     = useState([]);
-  const [pick,     setPick]     = useState(null);  // selected AFCD item
+  const [pick,     setPick]     = useState(null);
   const [grams,    setGrams]    = useState('150');
   const [draft,    setDraft]    = useState(null);
   const [busy,     setBusy]     = useState(false);
@@ -237,10 +274,11 @@ export default function App() {
   const [usdaLoading, setUsdaLoading] = useState(false);
   const [fetchingDetail, setFetchingDetail] = useState(false);
   const [imgPreview, setImgPreview] = useState(null);
+  const [isLiquid, setIsLiquid] = useState(false);
+  const [editIdx,  setEditIdx]  = useState(null); // null=adding, number=editing that index
   const usdaTimer = useRef(null);
-  const camRef = useRef(null);
+  const camRef    = useRef(null);
 
-  // persist
   useEffect(() => {
     try { localStorage.setItem(STORE, JSON.stringify(data)); } catch {}
   }, [data]);
@@ -248,6 +286,7 @@ export default function App() {
   const meta    = DAYS.find(d => d.id === day);
   const sel     = data.selections[day] || DEFAULTS[day];
   const chk     = data.checked[day] || {};
+  const photos  = data.photos?.[day] || {};
   const slotMeta = SLOTS.find(s => s.key === open);
 
   const eaten = useMemo(() => SLOTS.reduce((a,s) => {
@@ -288,11 +327,31 @@ export default function App() {
       return { ...d, selections:{ ...d.selections, [day]:{ ...d.selections[day], [slot]:next } } };
     });
   };
+  const replaceItem = (slot, idx, val) => {
+    setData(d => {
+      const arr = [...toArr(d.selections[day]?.[slot])];
+      arr[idx] = val;
+      return { ...d, selections:{ ...d.selections, [day]:{ ...d.selections[day], [slot]:arr } } };
+    });
+  };
   const removeItem = (slot, idx) => {
     setData(d => {
       const arr = [...toArr(d.selections[day]?.[slot])];
       arr.splice(idx, 1);
       return { ...d, selections:{ ...d.selections, [day]:{ ...d.selections[day], [slot]:arr } } };
+    });
+  };
+  const setSlotPhoto = (slotKey, photo) => {
+    setData(d => ({
+      ...d,
+      photos: { ...d.photos, [day]: { ...(d.photos?.[day] || {}), [slotKey]: photo } },
+    }));
+  };
+  const removeSlotPhoto = (slotKey) => {
+    setData(d => {
+      const dayPhotos = { ...(d.photos?.[day] || {}) };
+      delete dayPhotos[slotKey];
+      return { ...d, photos: { ...d.photos, [day]: dayPhotos } };
     });
   };
   const toggleCheck = slot =>
@@ -310,11 +369,28 @@ export default function App() {
   };
 
   /* ── sheet ── */
-  const openSheet = slot => {
-    setOpen(slot); setQuery(''); setHits([]); setUsdaHits([]); setUsdaLoading(false); setFetchingDetail(false); setImgPreview(null); setPick(null); setGrams('150'); setDraft(null); setAiErr(null); setBusy(false);
+  const resetSheetState = () => {
+    setQuery(''); setHits([]); setUsdaHits([]); setUsdaLoading(false);
+    setFetchingDetail(false); setImgPreview(null); setPick(null);
+    setGrams('150'); setDraft(null); setAiErr(null); setBusy(false);
+    setIsLiquid(false); setEditIdx(null);
     if (usdaTimer.current) clearTimeout(usdaTimer.current);
   };
-  const closeSheet = () => setOpen(null);
+
+  const openSheet = (slot, editItemIdx = null) => {
+    resetSheetState();
+    setOpen(slot);
+    if (editItemIdx !== null) {
+      setEditIdx(editItemIdx);
+      const items = toArr(data.selections[day]?.[slot]);
+      const v = items[editItemIdx];
+      const o = one(v);
+      if (o && !o.skip) {
+        setDraft({ custom:true, n:o.n, k:o.k, p:o.p, c:o.c, f:o.f });
+      }
+    }
+  };
+  const closeSheet = () => { setOpen(null); resetSheetState(); };
 
   const onQuery = val => {
     setQuery(val); setDraft(null); setAiErr(null); setPick(null);
@@ -332,6 +408,8 @@ export default function App() {
     }
   };
 
+  const unit = isLiquid ? 'ml' : 'g';
+
   const scaledDraft = pick ? (() => {
     const g = Math.max(1, parseFloat(grams)||150), sc = g/100;
     return { custom:true, n:pick.name.slice(0,28),
@@ -346,7 +424,23 @@ export default function App() {
     setBusy(false);
   };
 
-  const confirmAdd = (slot, val) => { addItem(slot, val); setQuery(''); setHits([]); setUsdaHits([]); setUsdaLoading(false); setFetchingDetail(false); setImgPreview(null); setPick(null); setGrams('150'); setDraft(null); setAiErr(null); if (usdaTimer.current) clearTimeout(usdaTimer.current); };
+  const confirmItem = (slot, val, photo = null) => {
+    if (editIdx !== null) {
+      replaceItem(slot, editIdx, val);
+    } else {
+      addItem(slot, val);
+    }
+    if (photo) setSlotPhoto(slot, photo);
+    resetSheetState();
+    setOpen(null);
+  };
+
+  const handleGeneratePhoto = (slotKey) => {
+    const items = toArr(sel[slotKey]);
+    const names = items.filter(v => one(v) && !one(v)?.skip).map(v => one(v).n).join(', ');
+    if (!names) return;
+    setSlotPhoto(slotKey, makeFoodPhotoUrl(names));
+  };
 
   /* ── shared styles ── */
   const inp = { padding:'12px 14px', borderRadius:12, border:`1.5px solid ${T.border}`, fontSize:16, color:T.ink, outline:'none', background:'#fff', width:'100%', ...sf };
@@ -417,15 +511,40 @@ export default function App() {
 
             {/* ── MEAL CARDS ── */}
             {SLOTS.map(s => {
-              const items  = toArr(sel[s.key]);
-              const totals = sumSlot(items);
-              const isChk  = !!chk[s.key];
+              const items   = toArr(sel[s.key]);
+              const totals  = sumSlot(items);
+              const isChk   = !!chk[s.key];
               const skipOnly = isSkipOnly(items);
+              const photo   = photos[s.key] || null;
+              const hasFood = !skipOnly && items.filter(v => one(v) && !one(v)?.skip).length > 0;
 
               return (
                 <div key={s.key} style={{ background:T.surface, borderRadius:18, marginBottom:10,
                   boxShadow:'0 1px 6px rgba(0,0,0,0.05)',
                   borderLeft:`4px solid ${isChk ? T.ok : T.border}` }}>
+
+                  {/* meal photo banner */}
+                  {photo ? (
+                    <div style={{ position:'relative' }}>
+                      <img src={photo} alt={s.label}
+                        style={{ width:'100%', height:140, objectFit:'cover',
+                          borderTopLeftRadius:14, borderTopRightRadius:14 }} />
+                      <button onClick={() => removeSlotPhoto(s.key)}
+                        style={{ position:'absolute', top:6, right:6, background:'rgba(0,0,0,0.5)',
+                          border:'none', borderRadius:'50%', width:26, height:26, cursor:'pointer',
+                          display:'flex', alignItems:'center', justifyContent:'center' }}>
+                        <X size={13} color="#fff" />
+                      </button>
+                    </div>
+                  ) : hasFood ? (
+                    <button onClick={() => handleGeneratePhoto(s.key)}
+                      style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'center',
+                        gap:6, padding:'8px', background:T.goldLight, border:'none',
+                        borderTopLeftRadius:14, borderTopRightRadius:14, cursor:'pointer',
+                        color:T.gold, fontSize:12, fontWeight:600 }}>
+                      <Wand2 size={12} /> Generate meal photo
+                    </button>
+                  ) : null}
 
                   <div style={{ padding:'14px 14px 12px' }}>
                     {/* slot header */}
@@ -452,10 +571,14 @@ export default function App() {
                                       style={{ background:'none', border:'none', cursor:'pointer', padding:'2px', display:'flex', alignItems:'center', flexShrink:0 }}>
                                       <X size={12} color={T.faint} />
                                     </button>
+                                    <button onClick={() => openSheet(s.key, idx)}
+                                      style={{ background:'none', border:'none', cursor:'pointer', padding:'2px', display:'flex', alignItems:'center', flexShrink:0 }}>
+                                      <Pencil size={11} color={T.faint} />
+                                    </button>
                                     <span style={{ fontSize:14, fontWeight:600, color:T.ink }}>{o.n}</span>
                                     {o.custom && <span style={{ fontSize:10, color:T.accentSoft, fontWeight:600 }}>CUSTOM</span>}
                                   </div>
-                                  <div style={{ ...NF, fontSize:12, color:T.muted, paddingLeft:20 }}>
+                                  <div style={{ ...NF, fontSize:12, color:T.muted, paddingLeft:36 }}>
                                     {o.k} kcal · {o.p}P · {o.c}C · {o.f}F
                                   </div>
                                 </div>
@@ -463,7 +586,7 @@ export default function App() {
                             })}
                             {items.filter(v=>one(v)&&!one(v).skip).length > 1 && (
                               <div style={{ ...NF, fontSize:12, fontWeight:700, color:T.accentSoft,
-                                marginTop:6, paddingTop:6, borderTop:`1px dashed ${T.border}`, paddingLeft:20 }}>
+                                marginTop:6, paddingTop:6, borderTop:`1px dashed ${T.border}`, paddingLeft:36 }}>
                                 Total: {totals.k} kcal · {totals.p}P · {totals.c}C · {totals.f}F
                               </div>
                             )}
@@ -506,7 +629,6 @@ export default function App() {
           /* ── PROGRESS TAB ── */
           <div style={{ padding:'16px 16px 8px' }}>
 
-            {/* weight log */}
             <div style={{ background:T.surface, borderRadius:20, padding:'16px 18px', marginBottom:12, boxShadow:'0 1px 8px rgba(0,0,0,0.06)' }}>
               <div style={{ ...NF, fontSize:11, letterSpacing:1.5, color:T.gold, fontWeight:700, marginBottom:12 }}>LOG A WEIGH-IN</div>
               <div style={{ display:'flex', gap:8, alignItems:'center' }}>
@@ -523,7 +645,6 @@ export default function App() {
               <p style={{ fontSize:12, color:T.faint, marginTop:8 }}>Same morning, same conditions. The trend is the truth.</p>
             </div>
 
-            {/* weight stats */}
             {wStats && (
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginBottom:12 }}>
                 <StatCard label="Current"  value={`${wStats.current}`} unit="kg" />
@@ -535,7 +656,6 @@ export default function App() {
               </div>
             )}
 
-            {/* weight chart */}
             <div style={{ background:T.surface, borderRadius:20, padding:'16px 8px 12px 0', marginBottom:12, boxShadow:'0 1px 8px rgba(0,0,0,0.06)' }}>
               <div style={{ ...NF, fontSize:11, letterSpacing:1.5, color:T.gold, fontWeight:700, paddingLeft:18, marginBottom:8 }}>WEIGHT TREND</div>
               {weights.length === 0 ? (
@@ -555,7 +675,6 @@ export default function App() {
               )}
             </div>
 
-            {/* adherence */}
             <div style={{ background:T.surface, borderRadius:20, padding:'16px 18px', boxShadow:'0 1px 8px rgba(0,0,0,0.06)' }}>
               <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                 <div style={{ ...NF, fontSize:11, letterSpacing:1.5, color:T.gold, fontWeight:700 }}>MEALS ON PLAN</div>
@@ -584,24 +703,23 @@ export default function App() {
       {/* ── BOTTOM SHEET ── */}
       {open && (
         <>
-          {/* backdrop */}
           <div onClick={closeSheet}
             style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', zIndex:100 }} />
 
-          {/* sheet */}
           <div style={{ position:'fixed', bottom:0, left:0, right:0, zIndex:101,
             background:T.surface, borderRadius:'24px 24px 0 0',
             paddingBottom:'calc(20px + env(safe-area-inset-bottom))',
             maxHeight:'88vh', overflowY:'auto', boxShadow:'0 -6px 40px rgba(0,0,0,0.15)' }}>
 
-            {/* handle */}
             <div style={{ width:40, height:4, background:T.border, borderRadius:2, margin:'12px auto 0' }} />
 
             <div style={{ padding:'12px 18px 0' }}>
               {/* sheet header */}
               <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
                 <div>
-                  <div style={{ ...NF, fontSize:11, letterSpacing:1.5, color:T.muted, fontWeight:600 }}>ADDING TO</div>
+                  <div style={{ ...NF, fontSize:11, letterSpacing:1.5, color:T.muted, fontWeight:600 }}>
+                    {editIdx !== null ? 'EDITING' : 'ADDING TO'}
+                  </div>
                   <div style={{ fontSize:17, fontWeight:700, color:T.ink }}>{slotMeta?.label}</div>
                 </div>
                 <button onClick={closeSheet}
@@ -633,11 +751,11 @@ export default function App() {
                     if (!file) return;
                     const reader = new FileReader();
                     reader.onload = async ev => {
-                      const dataUrl = ev.target.result;
-                      setImgPreview(dataUrl);
+                      const raw = ev.target.result;
+                      setImgPreview(raw);
                       setDraft(null); setAiErr(null); setBusy(true);
                       try {
-                        const base64 = dataUrl.split(',')[1];
+                        const base64 = raw.split(',')[1];
                         setDraft(await aiEstimateFromImage(base64, file.type));
                       } catch {
                         setAiErr("Couldn't estimate — edit numbers manually.");
@@ -673,7 +791,7 @@ export default function App() {
                   <div style={{ fontSize:11, color:T.muted, fontWeight:600, letterSpacing:1, marginBottom:6 }}>AFCD DATABASE MATCHES</div>
                   <div style={{ border:`1.5px solid ${T.border}`, borderRadius:14, overflow:'hidden' }}>
                     {hits.map((item, i) => (
-                      <button key={i} onClick={() => setPick(item)}
+                      <button key={i} onClick={() => { setPick(item); setIsLiquid(false); }}
                         style={{ width:'100%', textAlign:'left', padding:'12px 14px',
                           border:'none', borderBottom: i<hits.length-1 ? `1px solid ${T.border}` : 'none',
                           background:'transparent', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
@@ -699,9 +817,11 @@ export default function App() {
                           try {
                             const detail = await fetchUSDAfoodDetail(item.fdcId);
                             setPick(detail);
+                            setIsLiquid(detail.isLiquid || false);
                             if (detail.servingSize) setGrams(String(detail.servingSize));
                           } catch {
                             setPick(item);
+                            setIsLiquid(item.isLiquid || false);
                             if (item.servingSize) setGrams(String(item.servingSize));
                           }
                           setFetchingDetail(false);
@@ -710,8 +830,11 @@ export default function App() {
                             border:'none', borderBottom: i<usdaHits.length-1 ? `1px solid ${T.border}` : 'none',
                             background:'transparent', cursor: fetchingDetail ? 'default' : 'pointer',
                             display:'flex', justifyContent:'space-between', alignItems:'center', opacity: fetchingDetail ? 0.5 : 1 }}>
-                          <span style={{ fontSize:13, color:T.ink }}>{item.name}</span>
-                          <span style={{ ...NF, fontSize:12, color:T.muted, flexShrink:0, marginLeft:10 }}>{item.kcal} kcal/100g</span>
+                          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                            {item.isLiquid && <Droplets size={12} color={T.blue} />}
+                            <span style={{ fontSize:13, color:T.ink }}>{item.name}</span>
+                          </div>
+                          <span style={{ ...NF, fontSize:12, color:T.muted, flexShrink:0, marginLeft:10 }}>{item.kcal} kcal/100{item.isLiquid?'ml':'g'}</span>
                         </button>
                       ))}
                       {fetchingDetail && (
@@ -722,23 +845,34 @@ export default function App() {
                 </div>
               )}
 
-              {/* AFCD gram adjuster */}
+              {/* gram/ml adjuster */}
               {pick && (
                 <div style={{ border:`2px solid ${T.accentLight}`, borderRadius:16, padding:14, marginBottom:12, background:T.accentLight }}>
-                  <div style={{ fontSize:14, fontWeight:700, color:T.accent, marginBottom:10 }}>{pick.name}</div>
+                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
+                    <div style={{ fontSize:14, fontWeight:700, color:T.accent, flex:1 }}>{pick.name}</div>
+                    {/* liquid toggle */}
+                    <button onClick={() => setIsLiquid(v => !v)}
+                      style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 8px', borderRadius:8,
+                        border:`1.5px solid ${isLiquid ? T.blue : T.border}`,
+                        background: isLiquid ? '#EBF3FA' : 'transparent',
+                        cursor:'pointer', fontSize:11, fontWeight:600,
+                        color: isLiquid ? T.blue : T.muted }}>
+                      <Droplets size={12} /> {isLiquid ? 'ml' : 'liquid?'}
+                    </button>
+                  </div>
                   <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom: pick.servingLabel ? 6 : 10 }}>
-                    <span style={{ fontSize:13, color:T.muted, flexShrink:0 }}>Serving size</span>
+                    <span style={{ fontSize:13, color:T.muted, flexShrink:0 }}>Serving</span>
                     <input value={grams} onChange={e=>setGrams(e.target.value)} inputMode="decimal"
                       style={{ ...inp, width:80, textAlign:'center', padding:'8px' }} />
-                    <span style={{ fontSize:13, color:T.muted }}>g</span>
-                    <button onClick={() => { setPick(null); setHits(searchAFCD(query)); }}
+                    <span style={{ fontSize:13, color:T.muted }}>{unit}</span>
+                    <button onClick={() => { setPick(null); setIsLiquid(false); setHits(searchAFCD(query)); }}
                       style={{ marginLeft:'auto', fontSize:12, color:T.muted, background:'none', border:'none', cursor:'pointer', textDecoration:'underline' }}>
                       change
                     </button>
                   </div>
                   {pick.servingLabel && pick.servingSize && (
                     <div style={{ fontSize:11, color:T.accentSoft, marginBottom:10 }}>
-                      {pick.servingLabel} = {pick.servingSize}g
+                      {pick.servingLabel} = {pick.servingSize}{unit}
                       {parseFloat(grams) !== pick.servingSize && (
                         <button onClick={() => setGrams(String(pick.servingSize))}
                           style={{ marginLeft:8, fontSize:11, color:T.accentSoft, background:'none', border:'none', cursor:'pointer', textDecoration:'underline' }}>
@@ -752,18 +886,18 @@ export default function App() {
                       <div style={{ ...NF, fontSize:13, color:T.accentSoft, marginBottom:10 }}>
                         {scaledDraft.k} kcal · {scaledDraft.p}g P · {scaledDraft.c}g C · {scaledDraft.f}g F
                       </div>
-                      <button onClick={() => confirmAdd(open, scaledDraft)}
+                      <button onClick={() => confirmItem(open, scaledDraft)}
                         style={{ width:'100%', padding:'13px', borderRadius:12, border:'none',
                           background:T.accent, color:'#fff', fontSize:14, fontWeight:600, cursor:'pointer',
                           display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
-                        <Plus size={16} /> Add to {slotMeta?.label.toLowerCase()}
+                        <Plus size={16} /> {editIdx !== null ? 'Save changes' : `Add to ${slotMeta?.label.toLowerCase()}`}
                       </button>
                     </>
                   )}
                 </div>
               )}
 
-              {/* AI estimate */}
+              {/* AI estimate button */}
               {!pick && (
                 <>
                   <button onClick={runAI} disabled={busy || !query.trim()}
@@ -779,7 +913,7 @@ export default function App() {
                 </>
               )}
 
-              {/* AI draft */}
+              {/* AI draft editor */}
               {draft && !pick && (
                 <div style={{ border:`1.5px solid ${T.border}`, borderRadius:16, padding:14, marginBottom:12 }}>
                   <input value={draft.n} onChange={e=>setDraft(d=>({...d,n:e.target.value}))}
@@ -793,36 +927,41 @@ export default function App() {
                       </div>
                     ))}
                   </div>
-                  <button onClick={() => confirmAdd(open, { ...draft })}
+                  <button onClick={async () => {
+                    const photo = imgPreview ? await compressImage(imgPreview) : null;
+                    confirmItem(open, { ...draft }, photo);
+                  }}
                     style={{ width:'100%', padding:'13px', borderRadius:12, border:'none',
                       background:T.ok, color:'#fff', fontSize:14, fontWeight:600, cursor:'pointer',
                       display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
-                    <Plus size={16} /> Add to {slotMeta?.label.toLowerCase()}
+                    <Plus size={16} /> {editIdx !== null ? 'Save changes' : `Add to ${slotMeta?.label.toLowerCase()}`}
                   </button>
                 </div>
               )}
 
-              {/* catalog */}
-              <div style={{ marginBottom:8 }}>
-                <div style={{ fontSize:11, color:T.muted, fontWeight:600, letterSpacing:1, marginBottom:8 }}>
-                  {query ? 'OR PICK FROM PLAN' : 'PICK FROM PLAN'}
+              {/* catalog — only show when not editing */}
+              {editIdx === null && (
+                <div style={{ marginBottom:8 }}>
+                  <div style={{ fontSize:11, color:T.muted, fontWeight:600, letterSpacing:1, marginBottom:8 }}>
+                    {query ? 'OR PICK FROM PLAN' : 'PICK FROM PLAN'}
+                  </div>
+                  {(slotMeta?.opts || []).map(id => {
+                    const oo = OPT[id];
+                    return (
+                      <button key={id} onClick={() => confirmItem(open, id)}
+                        style={{ width:'100%', textAlign:'left', padding:'12px 14px', marginBottom:6,
+                          borderRadius:12, border:`1.5px solid ${T.border}`, background:T.surface, cursor:'pointer',
+                          display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                        <div>
+                          <div style={{ fontSize:14, fontWeight:500, color:oo.skip?T.muted:T.ink }}>{oo.n}</div>
+                          {!oo.skip && <div style={{ ...NF, fontSize:12, color:T.muted, marginTop:1 }}>{oo.k} kcal · {oo.p}P · {oo.c}C · {oo.f}F</div>}
+                        </div>
+                        <Plus size={14} color={T.accentSoft} style={{ flexShrink:0, marginLeft:8 }} />
+                      </button>
+                    );
+                  })}
                 </div>
-                {(slotMeta?.opts || []).map(id => {
-                  const oo = OPT[id];
-                  return (
-                    <button key={id} onClick={() => confirmAdd(open, id)}
-                      style={{ width:'100%', textAlign:'left', padding:'12px 14px', marginBottom:6,
-                        borderRadius:12, border:`1.5px solid ${T.border}`, background:T.surface, cursor:'pointer',
-                        display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                      <div>
-                        <div style={{ fontSize:14, fontWeight:500, color:oo.skip?T.muted:T.ink }}>{oo.n}</div>
-                        {!oo.skip && <div style={{ ...NF, fontSize:12, color:T.muted, marginTop:1 }}>{oo.k} kcal · {oo.p}P · {oo.c}C · {oo.f}F</div>}
-                      </div>
-                      <Plus size={14} color={T.accentSoft} style={{ flexShrink:0, marginLeft:8 }} />
-                    </button>
-                  );
-                })}
-              </div>
+              )}
             </div>
           </div>
         </>
