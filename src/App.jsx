@@ -118,22 +118,21 @@ async function compressImage(dataUrl, maxWidth = 600, quality = 0.65) {
   });
 }
 
-/* ── generate food photo using Gemini image generation ── */
-const GEMINI_IMG_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent';
-
+/* ── fetch food photo from TheMealDB (free, no key) ── */
 async function generateFoodPhoto(foodDesc) {
-  const res = await fetch(GEMINI_IMG_URL, {
-    method: 'POST',
-    headers: GEMINI_HEADERS,
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: `Professional food photography of: ${foodDesc}. White plate, restaurant quality, studio lighting, appetizing presentation. Photo only, no text.` }] }],
-      generationConfig: { responseModalities: ['IMAGE', 'TEXT'] },
-    }),
-  });
-  const data = await res.json();
-  const part = data.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-  if (!part) throw new Error('No image returned');
-  return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+  // Try progressively shorter/simpler search terms until a photo is found
+  const firstItem = foodDesc.split(',')[0].trim();
+  const keywords = firstItem.replace(/[()&+½]/g, ' ').split(/\s+/).filter(w => w.length > 3);
+  const queries = [firstItem, ...keywords];
+
+  for (const q of queries) {
+    try {
+      const res = await fetch(`https://www.themealdb.com/api/json/v1/1/search.php?s=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      if (data.meals?.[0]?.strMealThumb) return data.meals[0].strMealThumb;
+    } catch {}
+  }
+  throw new Error(`No photo found for "${firstItem}" — try the camera instead`);
 }
 
 function freshData() {
@@ -288,6 +287,7 @@ export default function App() {
   const [isLiquid,       setIsLiquid]       = useState(false);
   const [editIdx,        setEditIdx]        = useState(null);
   const [generatingSlot, setGeneratingSlot] = useState(null);
+  const [photoErr,       setPhotoErr]       = useState(null);
   const usdaTimer = useRef(null);
   const camRef    = useRef(null);
 
@@ -452,11 +452,13 @@ export default function App() {
     const names = items.filter(v => one(v) && !one(v)?.skip).map(v => one(v).n).join(', ');
     if (!names || generatingSlot) return;
     setGeneratingSlot(slotKey);
+    setPhotoErr(null);
     try {
       const dataUrl = await generateFoodPhoto(names);
       setSlotPhoto(slotKey, dataUrl);
-    } catch {
-      // silently fail — button reappears
+    } catch (err) {
+      setPhotoErr(err.message);
+      console.error('Photo generation failed:', err);
     }
     setGeneratingSlot(null);
   };
@@ -615,7 +617,7 @@ export default function App() {
                         {hasFood && !photo && (
                           <button onClick={() => handleGeneratePhoto(s.key)}
                             disabled={!!generatingSlot}
-                            title="Generate meal photo"
+                            title="Generate meal photo with AI"
                             style={{ width:44, height:32, borderRadius:10,
                               border:`1.5px solid ${T.gold}`,
                               background:T.goldLight,
@@ -624,6 +626,14 @@ export default function App() {
                               opacity: generatingSlot ? 0.5 : 1 }}>
                             <Wand2 size={14} color={T.gold} />
                           </button>
+                        )}
+                        {photoErr && !generatingSlot && (
+                          <div style={{ fontSize:9, color:T.over, maxWidth:44, textAlign:'center', lineHeight:1.2,
+                            wordBreak:'break-all', cursor:'pointer' }}
+                            title={photoErr}
+                            onClick={() => setPhotoErr(null)}>
+                            error ✕
+                          </div>
                         )}
                       </div>
                     </div>
