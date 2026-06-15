@@ -118,13 +118,22 @@ async function compressImage(dataUrl, maxWidth = 600, quality = 0.65) {
   });
 }
 
-/* ── generate food photo URL via pollinations.ai ── */
-function makeFoodPhotoUrl(foodDesc) {
-  // Strip special chars, use simple words joined with +
-  const clean = foodDesc.replace(/[^a-zA-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
-  const prompt = `food+photography+${clean.split(' ').join('+')}+plated+meal+appetizing+high+quality`;
-  const seed = foodDesc.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % 9999;
-  return `https://image.pollinations.ai/prompt/${prompt}?width=400&height=240&nologo=true&seed=${seed}&model=flux`;
+/* ── generate food photo using Gemini image generation ── */
+const GEMINI_IMG_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent';
+
+async function generateFoodPhoto(foodDesc) {
+  const res = await fetch(GEMINI_IMG_URL, {
+    method: 'POST',
+    headers: GEMINI_HEADERS,
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: `Professional food photography of: ${foodDesc}. White plate, restaurant quality, studio lighting, appetizing presentation. Photo only, no text.` }] }],
+      generationConfig: { responseModalities: ['IMAGE', 'TEXT'] },
+    }),
+  });
+  const data = await res.json();
+  const part = data.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+  if (!part) throw new Error('No image returned');
+  return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
 }
 
 function freshData() {
@@ -276,8 +285,9 @@ export default function App() {
   const [usdaLoading, setUsdaLoading] = useState(false);
   const [fetchingDetail, setFetchingDetail] = useState(false);
   const [imgPreview, setImgPreview] = useState(null);
-  const [isLiquid, setIsLiquid] = useState(false);
-  const [editIdx,  setEditIdx]  = useState(null); // null=adding, number=editing that index
+  const [isLiquid,       setIsLiquid]       = useState(false);
+  const [editIdx,        setEditIdx]        = useState(null);
+  const [generatingSlot, setGeneratingSlot] = useState(null);
   const usdaTimer = useRef(null);
   const camRef    = useRef(null);
 
@@ -437,12 +447,18 @@ export default function App() {
     setOpen(null);
   };
 
-  const handleGeneratePhoto = (slotKey) => {
+  const handleGeneratePhoto = async (slotKey) => {
     const items = toArr(sel[slotKey]);
     const names = items.filter(v => one(v) && !one(v)?.skip).map(v => one(v).n).join(', ');
-    if (!names) return;
-    // Set URL immediately — PhotoBanner component shows spinner while it loads
-    setSlotPhoto(slotKey, makeFoodPhotoUrl(names));
+    if (!names || generatingSlot) return;
+    setGeneratingSlot(slotKey);
+    try {
+      const dataUrl = await generateFoodPhoto(names);
+      setSlotPhoto(slotKey, dataUrl);
+    } catch {
+      // silently fail — button reappears
+    }
+    setGeneratingSlot(null);
   };
 
   /* ── shared styles ── */
@@ -529,6 +545,12 @@ export default function App() {
                   {/* meal photo banner */}
                   {photo ? (
                     <PhotoBanner photo={photo} onRemove={() => removeSlotPhoto(s.key)} />
+                  ) : generatingSlot === s.key ? (
+                    <div style={{ height:80, background:T.goldLight, borderTopLeftRadius:14, borderTopRightRadius:14,
+                      display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+                      <Wand2 size={15} color={T.gold} />
+                      <span style={{ fontSize:12, color:T.gold, fontWeight:600 }}>Generating photo…</span>
+                    </div>
                   ) : hasFood ? (
                     <button onClick={() => handleGeneratePhoto(s.key)}
                       style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'center',
