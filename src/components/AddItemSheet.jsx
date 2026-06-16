@@ -1,5 +1,5 @@
 import { Camera, Database, Droplets, Plus, Sparkles, X } from 'lucide-react';
-import { T, NF, inp, OPT } from '../constants.js';
+import { T, NF, inp } from '../constants.js';
 
 export function AddItemSheet({ sheet }) {
   const {
@@ -9,10 +9,11 @@ export function AddItemSheet({ sheet }) {
     usdaHits, usdaLoading, fetchingDetail,
     imgPreview, setImgPreview, isLiquid, setIsLiquid,
     camRef,
+    savedMeals,
     closeSheet, onQuery,
     handlePickAFCD, handlePickUSDA, clearPick,
     runAI, handleImageCapture,
-    confirmScaled, confirmDraft, confirmCatalog,
+    confirmScaled, confirmDraft, confirmSavedMeal,
   } = sheet;
 
   return (
@@ -258,27 +259,38 @@ export function AddItemSheet({ sheet }) {
             </div>
           )}
 
-          {/* catalog — hidden when editing */}
+          {/* saved meals — hidden when editing */}
           {editIdx === null && (
             <div style={{ marginBottom:8 }}>
               <div style={{ fontSize:11, color:T.muted, fontWeight:600, letterSpacing:1, marginBottom:8 }}>
-                {query ? 'OR PICK FROM PLAN' : 'PICK FROM PLAN'}
+                SAVED MEALS
               </div>
-              {(slotMeta?.opts || []).map(id => {
-                const oo = OPT[id];
-                return (
-                  <button key={id} onClick={() => confirmCatalog(id)}
-                    style={{ width:'100%', textAlign:'left', padding:'12px 14px', marginBottom:6,
-                      borderRadius:12, border:`1.5px solid ${T.border}`, background:T.surface, cursor:'pointer',
-                      display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                    <div>
-                      <div style={{ fontSize:14, fontWeight:500, color:oo.skip ? T.muted : T.ink }}>{oo.n}</div>
-                      {!oo.skip && <div style={{ ...NF, fontSize:12, color:T.muted, marginTop:1 }}>{oo.k} kcal · {oo.p}P · {oo.c}C · {oo.f}F</div>}
-                    </div>
-                    <Plus size={14} color={T.accentSoft} style={{ flexShrink:0, marginLeft:8 }} />
-                  </button>
-                );
-              })}
+              {savedMeals.length === 0 ? (
+                <p style={{ fontSize:13, color:T.faint, textAlign:'center', padding:'16px 0' }}>
+                  No saved meals yet — use "Estimate macros with AI" to save meals.
+                </p>
+              ) : (
+                savedMeals
+                  .filter(m => !query.trim() || m.n.toLowerCase().includes(query.toLowerCase()))
+                  .map(meal => (
+                    <button key={meal.id} onClick={() => confirmSavedMeal(meal)}
+                      style={{ width:'100%', textAlign:'left', padding:'12px 14px', marginBottom:6,
+                        borderRadius:12, border:`1.5px solid ${T.border}`, background:T.surface, cursor:'pointer',
+                        display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:14, fontWeight:500, color:T.ink,
+                          overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{meal.n}</div>
+                        <div style={{ ...NF, fontSize:12, color:T.muted, marginTop:1 }}>
+                          {meal.k} kcal · {meal.p}P · {meal.c}C · {meal.f}F
+                        </div>
+                      </div>
+                      {meal.photo && (
+                        <img src={meal.photo} alt="" style={{ width:36, height:36, borderRadius:8, objectFit:'cover', flexShrink:0 }} />
+                      )}
+                      <Plus size={14} color={T.accentSoft} style={{ flexShrink:0 }} />
+                    </button>
+                  ))
+              )}
             </div>
           )}
         </div>

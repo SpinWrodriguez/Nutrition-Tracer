@@ -5,9 +5,15 @@ import { PhotoBanner } from './ui.jsx';
 export function MealCard({
   slot, items, totals, isChecked, skipOnly,
   photo, hasFood, isGenerating, photoErr,
-  clipboard,
+  clipboard, focus,
   onCheck, onAdd, onEdit, onRemoveItem, onRemovePhoto, onGeneratePhoto, onClearError, onCopy, onPaste, onCancelCopy, onSaveItem,
 }) {
+  const macroLine = (o) => focus === 'protein'
+    ? `${o.p}P · ${o.c}C · ${o.f}F · ${o.k} kcal`
+    : `${o.k} kcal · ${o.p}P · ${o.c}C · ${o.f}F`;
+  const totalLine = focus === 'protein'
+    ? `Total: ${totals.p}P · ${totals.c}C · ${totals.f}F · ${totals.k} kcal`
+    : `Total: ${totals.k} kcal · ${totals.p}P · ${totals.c}C · ${totals.f}F`;
   const canPaste = !!clipboard;
 
   // Empty optional slots: compact dashed add-row instead of full card
@@ -77,7 +83,7 @@ export function MealCard({
                         {o.custom && <span style={{ fontSize:10, color:T.accentSoft, fontWeight:600 }}>CUSTOM</span>}
                       </div>
                       <div style={{ ...NF, fontSize:12, color:T.muted, paddingLeft:36 }}>
-                        {o.k} kcal · {o.p}P · {o.c}C · {o.f}F
+                        {macroLine(o)}
                       </div>
                     </div>
                   );
@@ -85,7 +91,7 @@ export function MealCard({
                 {items.filter(v => one(v) && !one(v).skip).length > 1 && (
                   <div style={{ ...NF, fontSize:12, fontWeight:700, color:T.accentSoft,
                     marginTop:6, paddingTop:6, borderTop:`1px dashed ${T.border}`, paddingLeft:36 }}>
-                    Total: {totals.k} kcal · {totals.p}P · {totals.c}C · {totals.f}F
+                    {totalLine}
                   </div>
                 )}
               </div>

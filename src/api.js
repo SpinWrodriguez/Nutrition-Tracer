@@ -161,6 +161,41 @@ Reply ONLY with JSON, no markdown:
   return JSON.parse(m ? m[0] : raw);
 }
 
+/* ── AI day chat ── */
+export async function aiDayChat(messages, ctx) {
+  const slotLines = ctx.slots.map(s => {
+    const items = s.items.filter(i => !i.skip);
+    if (!items.length) return `${s.label}: empty`;
+    const sum = items.map(i => `${i.n} (${i.k}kcal ${i.p}P ${i.c}C ${i.f}F)`).join(' + ');
+    return `${s.label}${s.checked ? ' ✓' : ''}: ${sum}`;
+  }).join('\n');
+
+  const system = `You are a nutrition assistant embedded in a meal-tracking app. You ONLY answer questions about nutrition, food, meals, macros, calories, protein, health, or the user's current day context below. If the user asks anything unrelated to food or nutrition, respond with a short, witty one-liner that playfully reminds them you only know about food — e.g. "My brain is 100% made of protein and macros, so that's a bit outside my diet. Ask me something food-related!" Vary the joke each time.
+
+Answer in 2-4 sentences max. Be specific with numbers when relevant.
+
+Day: ${ctx.dayName}
+Goals: ${ctx.goals.kcal} kcal, ${ctx.goals.protein}g protein, ${ctx.goals.carbs}g carbs, ${ctx.goals.fat}g fat. Focus: ${ctx.goals.focus}.
+Meals:\n${slotLines}
+Eaten so far: ${ctx.eaten.k} kcal · ${ctx.eaten.p}g P · ${ctx.eaten.c}g C · ${ctx.eaten.f}g F
+
+Confirm you have context.`;
+
+  const contents = [
+    { role: 'user',  parts: [{ text: system }] },
+    { role: 'model', parts: [{ text: 'Got it — I have your full day context. What would you like to know?' }] },
+    ...messages.map(m => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.text }] })),
+  ];
+
+  const res = await fetch(GEMINI_URL, {
+    method: 'POST', headers: GEMINI_HEADERS,
+    body: JSON.stringify({ contents }),
+  });
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  const data = await res.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || 'No response';
+}
+
 /* ── AI meal plan generation ── */
 export async function aiGeneratePlan({ savedMeals, goals, weekLabel }) {
   if (!savedMeals.length) throw new Error('No saved meals');

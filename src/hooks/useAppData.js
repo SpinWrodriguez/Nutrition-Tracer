@@ -72,6 +72,53 @@ export function useAppData() {
     return { day: dm.label, date, kg: entry?.kg ?? null };
   }), [weights, weekDates]);
 
+  const weeklyNutrition = useMemo(() => weekDates.map(date => {
+    const dm = getDayMeta(date);
+    const s  = data.selections[date] || DEFAULTS[dm.id] || DEFAULTS.mon;
+    const c  = data.checked[date] || {};
+    const eaten = SLOTS.reduce((a, sl) => {
+      if (c[sl.key]) { const t = sumSlot(s[sl.key]); a.k+=t.k; a.p+=t.p; a.c+=t.c; a.f+=t.f; }
+      return a;
+    }, { k:0, p:0, c:0, f:0 });
+    return { date, day: dm.label, eaten };
+  }), [data, weekDates]);
+
+  const weeklyAvg = useMemo(() => {
+    const active = weeklyNutrition.filter(d => d.eaten.k > 0);
+    if (!active.length) return null;
+    const n = active.length;
+    return {
+      k: Math.round(active.reduce((s, d) => s + d.eaten.k, 0) / n),
+      p: Math.round(active.reduce((s, d) => s + d.eaten.p, 0) / n),
+      c: Math.round(active.reduce((s, d) => s + d.eaten.c, 0) / n),
+      f: Math.round(active.reduce((s, d) => s + d.eaten.f, 0) / n),
+      days: n,
+    };
+  }, [weeklyNutrition]);
+
+  const streak = useMemo(() => {
+    let count = 0;
+    const d = new Date(new Date().toISOString().slice(0, 10) + 'T12:00:00');
+    d.setDate(d.getDate() - 1);
+    for (let i = 0; i < 365; i++) {
+      const dateStr = d.toISOString().slice(0, 10);
+      const dm = getDayMeta(dateStr);
+      const s  = data.selections[dateStr] || DEFAULTS[dm.id] || DEFAULTS.mon;
+      const c  = data.checked[dateStr] || {};
+      const eaten = SLOTS.reduce((a, sl) => {
+        if (c[sl.key]) { const t = sumSlot(s[sl.key]); a.k+=t.k; a.p+=t.p; a.c+=t.c; a.f+=t.f; }
+        return a;
+      }, { k:0, p:0, c:0, f:0 });
+      const met = goals.focus === 'protein'
+        ? eaten.p >= goals.protein
+        : (eaten.k > 0 && eaten.k <= goals.kcal);
+      if (!met) break;
+      count++;
+      d.setDate(d.getDate() - 1);
+    }
+    return count;
+  }, [data, goals]);
+
   /* ── mutators (all keyed by `day` ISO date) ── */
 
   const addItem = (slot, val) =>
@@ -180,6 +227,10 @@ export function useAppData() {
 
   // Apply AI-generated week plan: planByDayId is { mon: { breakfast: "name", ... }, ... }
   // Maps meal names to savedMeals entries and writes them into the current week's dates
+  const importData = (raw) => {
+    try { setData(normalizeData(raw)); } catch {}
+  };
+
   const applyWeekPlan = (planByDayId) =>
     setData(d => {
       const newSelections = { ...d.selections };
@@ -215,5 +266,7 @@ export function useAppData() {
     setSlotPhoto, removeSlotPhoto,
     toggleCheck, resetWeek, logWeight,
     saveMeal, removeSavedMeal, setSavedMealPhoto, applyWeekPlan, syncPhotoToMealLib,
+    weeklyNutrition, weeklyAvg, streak,
+    importData,
   };
 }

@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
-import { Flame, Dumbbell, Scale, RotateCcw, Star, ChevronLeft, ChevronRight, Palette } from 'lucide-react';
+import { Flame, Dumbbell, TrendingUp, Star, ChevronLeft, ChevronRight, Settings } from 'lucide-react';
 import { T, NF, sf, SLOTS, toArr, one, sumSlot, isSkipOnly, getDayMeta } from './constants.js';
 import { useAppData } from './hooks/useAppData.js';
 import { useItemSheet } from './hooks/useItemSheet.js';
 import { MacroGauge, NavBtn } from './components/ui.jsx';
 import { MealCard } from './components/MealCard.jsx';
+import { AiChat } from './components/AiChat.jsx';
 import { AddItemSheet } from './components/AddItemSheet.jsx';
 import { ProgressTab } from './components/ProgressTab.jsx';
+import { SettingsTab } from './components/SettingsTab.jsx';
 import { SavedMealsTab } from './components/SavedMealsTab.jsx';
 import { aiWeeklySummary, aiGeneratePlan } from './api.js';
 
@@ -20,6 +22,7 @@ export default function App() {
     setSlotPhoto:       app.setSlotPhoto,
     saveMeal:           app.saveMeal,
     syncPhotoToMealLib: app.syncPhotoToMealLib,
+    savedMeals:         app.savedMeals,
   });
 
   // clipboard: { slotKey, items, label, fromDay }
@@ -34,7 +37,7 @@ export default function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem('nt-theme') || 'green');
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'blue' ? '#3A3A3A' : '#1C4230');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'blue' ? '#4A6880' : '#1C4230');
     localStorage.setItem('nt-theme', theme);
   }, [theme]);
   const toggleTheme = () => setTheme(t => t === 'green' ? 'blue' : 'green');
@@ -99,18 +102,9 @@ export default function App() {
               <div style={{ ...NF, fontSize:18, fontWeight:700, color:'#fff', lineHeight:1 }}>{meta.name}</div>
               <div style={{ fontSize:11, color:'rgba(255,255,255,0.55)', marginTop:2 }}>{meta.tag}</div>
             </div>
-            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-              <div style={{ textAlign:'right' }}>
-                <div style={{ ...NF, fontSize:10, color:'rgba(255,255,255,0.5)', letterSpacing:1 }}>THIS WEEK</div>
-                <div style={{ ...NF, fontSize:22, fontWeight:700, color:'#fff', lineHeight:1 }}>{adh.pct}%</div>
-              </div>
-              <button onClick={toggleTheme} title="Switch theme"
-                style={{ background:'rgba(255,255,255,0.15)', border:'none', borderRadius:8,
-                  padding:'5px 8px', cursor:'pointer', display:'flex', alignItems:'center', gap:4,
-                  color:'rgba(255,255,255,0.8)', fontSize:10, fontWeight:600 }}>
-                <Palette size={12} />
-                {theme === 'green' ? 'Forest' : 'Slate'}
-              </button>
+            <div style={{ textAlign:'right' }}>
+              <div style={{ ...NF, fontSize:10, color:'rgba(255,255,255,0.5)', letterSpacing:1 }}>THIS WEEK</div>
+              <div style={{ ...NF, fontSize:22, fontWeight:700, color:'#fff', lineHeight:1 }}>{adh.pct}%</div>
             </div>
           </div>
 
@@ -158,23 +152,38 @@ export default function App() {
           <div style={{ padding:'16px 16px 8px' }}>
 
             {/* macro summary */}
-            <div style={{ background:T.surface, borderRadius:20, padding:'16px 18px 14px', marginBottom:14, boxShadow:'0 1px 8px rgba(0,0,0,0.06)' }}>
-              <MacroGauge
+            {(() => {
+              const isProteinFocus = app.goals.focus === 'protein';
+              const carbsOver = app.goals.carbs && eaten.c > app.goals.carbs;
+              const fatOver   = app.goals.fat   && eaten.f > app.goals.fat;
+              const calGauge  = <MacroGauge
                 icon={<Flame size={14} color={eaten.k > app.goals.kcal ? T.over : T.ok} />}
                 label="Calories eaten" value={eaten.k} goal={app.goals.kcal} unit="kcal"
                 color={eaten.k > app.goals.kcal ? T.over : T.ok}
-              />
-              <div style={{ height:14 }} />
-              <MacroGauge
+              />;
+              const proGauge  = <MacroGauge
                 icon={<Dumbbell size={14} color={T.gold} />}
                 label="Protein eaten" value={eaten.p} goal={app.goals.protein} unit="g"
                 color={T.gold}
-              />
-              <div style={{ display:'flex', justifyContent:'space-between', marginTop:12, paddingTop:10, borderTop:`1px dashed ${T.border}`, fontSize:12, color:T.muted }}>
-                <span>Carbs <b style={{ color:T.ink }}>{eaten.c}g</b> · Fat <b style={{ color:T.ink }}>{eaten.f}g</b></span>
-                <span style={{ color:T.faint }}>Plan total: {planned.k} kcal</span>
-              </div>
-            </div>
+              />;
+              return (
+                <div style={{ background:T.surface, borderRadius:20, padding:'16px 18px 14px', marginBottom:14, boxShadow:'0 1px 8px rgba(0,0,0,0.06)' }}>
+                  {isProteinFocus ? proGauge : calGauge}
+                  <div style={{ height:14 }} />
+                  {isProteinFocus ? calGauge : proGauge}
+                  <div style={{ display:'flex', justifyContent:'space-between', marginTop:12, paddingTop:10, borderTop:`1px dashed ${T.border}`, fontSize:12, color:T.muted }}>
+                    <span>
+                      Carbs <b style={{ color:T.ink }}>{eaten.c}g</b>
+                      <span style={{ color: carbsOver ? T.over : T.faint, marginLeft:2 }}>{carbsOver ? '↑' : '↓'}</span>
+                      {' · '}
+                      Fat <b style={{ color:T.ink }}>{eaten.f}g</b>
+                      <span style={{ color: fatOver ? T.over : T.faint, marginLeft:2 }}>{fatOver ? '↑' : '↓'}</span>
+                    </span>
+                    <span style={{ color:T.faint }}>Plan: {planned.k} kcal</span>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* meal cards */}
             {SLOTS.map(s => {
@@ -205,29 +214,38 @@ export default function App() {
                   onPaste={() => pasteToSlot(s.key)}
                   onCancelCopy={() => setClipboard(null)}
                   onSaveItem={item => app.saveMeal({ n:item.n, k:item.k, p:item.p, c:item.c, f:item.f }, photo)}
+                  focus={app.goals.focus}
                 />
               );
             })}
 
-            <button onClick={app.resetWeek}
-              style={{ width:'100%', padding:'13px', borderRadius:14, border:`1.5px solid ${T.border}`,
-                background:'transparent', color:T.muted, fontSize:13, cursor:'pointer',
-                display:'flex', alignItems:'center', justifyContent:'center', gap:6, marginTop:4 }}>
-              <RotateCcw size={14} /> Clear this week's check-offs
-            </button>
           </div>
         )}
 
         {/* ── progress tab ── */}
         {tab === 'progress' && (
           <ProgressTab
+            weeklyNutrition={app.weeklyNutrition}
+            weeklyAvg={app.weeklyAvg}
+            wStats={app.wStats}
+            weekData={app.weekData}
+            streak={app.streak}
+            goals={app.goals}
+            onAiSummary={onAiSummary}
+            onAiPlan={onAiPlan}
+          />
+        )}
+
+        {/* ── settings tab ── */}
+        {tab === 'settings' && (
+          <SettingsTab
             wInput={app.wInput} setWInput={app.setWInput}
             day={app.day}
             logWeight={app.logWeight}
-            wStats={app.wStats} weekData={app.weekData}
+            wStats={app.wStats}
             goals={app.goals} updateGoals={app.updateGoals}
-            onAiSummary={onAiSummary}
-            onAiPlan={onAiPlan}
+            theme={theme} toggleTheme={toggleTheme}
+            data={app.data} importData={app.importData}
           />
         )}
 
@@ -243,13 +261,26 @@ export default function App() {
         )}
       </div>
 
+      {/* ── AI chat FAB ── */}
+      <AiChat dayContext={{
+        dayName: meta.name,
+        goals:   app.goals,
+        eaten:   eaten,
+        slots:   SLOTS.map(s => ({
+          label:   s.label,
+          items:   toArr(sel[s.key]).map(v => one(v)).filter(Boolean),
+          checked: !!chk[s.key],
+        })),
+      }} />
+
       {/* ── bottom nav ── */}
       <div style={{ position:'fixed', bottom:0, left:0, right:0, zIndex:20,
         background:T.surface, borderTop:`1px solid ${T.border}`,
         display:'flex', paddingBottom:'env(safe-area-inset-bottom)' }}>
-        <NavBtn active={tab==='plan'}     onClick={() => setTab('plan')}     icon={<Flame size={20}/>}  label="Plan" />
-        <NavBtn active={tab==='progress'} onClick={() => setTab('progress')} icon={<Scale size={20}/>}  label="Progress" />
-        <NavBtn active={tab==='saved'}    onClick={() => setTab('saved')}    icon={<Star size={20}/>}   label="Saved" />
+        <NavBtn active={tab==='plan'}     onClick={() => setTab('plan')}     icon={<Flame size={20}/>}      label="Plan" />
+        <NavBtn active={tab==='progress'} onClick={() => setTab('progress')} icon={<TrendingUp size={20}/>} label="Progress" />
+        <NavBtn active={tab==='saved'}    onClick={() => setTab('saved')}    icon={<Star size={20}/>}       label="Saved" />
+        <NavBtn active={tab==='settings'} onClick={() => setTab('settings')} icon={<Settings size={20}/>}  label="Settings" />
       </div>
 
       {/* ── add / edit item sheet ── */}

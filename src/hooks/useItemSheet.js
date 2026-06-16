@@ -6,7 +6,7 @@ import {
   generateFoodPhoto, compressImage,
 } from '../api.js';
 
-export function useItemSheet({ sel, day, addItem, replaceItem, setSlotPhoto, saveMeal, syncPhotoToMealLib }) {
+export function useItemSheet({ sel, day, addItem, replaceItem, setSlotPhoto, saveMeal, syncPhotoToMealLib, savedMeals }) {
   const [open,           setOpen]           = useState(null);
   const [editIdx,        setEditIdx]        = useState(null);
   const [query,          setQuery]          = useState('');
@@ -154,6 +154,12 @@ export function useItemSheet({ sel, day, addItem, replaceItem, setSlotPhoto, sav
 
   const confirmCatalog = id => confirmItem(open, id);
 
+  const confirmSavedMeal = meal => confirmItem(
+    open,
+    { custom:true, n:meal.n, k:meal.k, p:meal.p, c:meal.c, f:meal.f },
+    meal.photo || null,
+  );
+
   const handleGeneratePhoto = async slotKey => {
     const items = toArr(sel[slotKey]);
     const names = items.filter(v => one(v) && !one(v)?.skip).map(v => one(v).n).join(', ');
@@ -175,10 +181,11 @@ export function useItemSheet({ sel, day, addItem, replaceItem, setSlotPhoto, sav
     imgPreview, setImgPreview, isLiquid, setIsLiquid,
     generatingSlot, photoErr, setPhotoErr,
     camRef,
+    savedMeals: savedMeals || [],
     openSheet, closeSheet, onQuery,
     handlePickAFCD, handlePickUSDA, clearPick,
     runAI, handleImageCapture,
-    confirmScaled, confirmDraft, confirmCatalog,
+    confirmScaled, confirmDraft, confirmSavedMeal,
     handleGeneratePhoto,
   };
 }
