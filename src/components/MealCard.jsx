@@ -1,13 +1,22 @@
-import { Check, Plus, X, Pencil, Wand2, Copy, ClipboardPaste, Star } from 'lucide-react';
+import { useRef } from 'react';
+import { Check, Plus, X, Pencil, Wand2, Copy, ClipboardPaste, Star, ImagePlus } from 'lucide-react';
 import { T, NF, one } from '../constants.js';
-import { PhotoBanner } from './ui.jsx';
 
 export function MealCard({
   slot, items, totals, isChecked, skipOnly,
   photo, hasFood, isGenerating, photoErr,
   clipboard, focus,
-  onCheck, onAdd, onEdit, onRemoveItem, onRemovePhoto, onGeneratePhoto, onClearError, onCopy, onPaste, onCancelCopy, onSaveItem,
+  onCheck, onAdd, onEdit, onRemoveItem, onRemovePhoto, onGeneratePhoto, onPickPhoto, onClearError, onCopy, onPaste, onCancelCopy, onSaveItem,
 }) {
+  const fileRef = useRef(null);
+  const handleFilePick = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => onPickPhoto?.(ev.target.result);
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
   const macroLine = (o) => focus === 'protein'
     ? `${o.p}P · ${o.c}C · ${o.f}F · ${o.k} kcal`
     : `${o.k} kcal · ${o.p}P · ${o.c}C · ${o.f}F`;
@@ -34,14 +43,57 @@ export function MealCard({
     <div style={{ background:T.surface, borderRadius:18, marginBottom:10,
       boxShadow:'0 1px 6px rgba(0,0,0,0.05)', borderLeft:`4px solid ${isChecked ? T.ok : T.border}` }}>
 
-      {/* photo / generating banner */}
+      {/* photo header */}
+      <input ref={fileRef} type="file" accept="image/*" onChange={handleFilePick} style={{ display:'none' }} />
       {photo ? (
-        <PhotoBanner photo={photo} onRemove={onRemovePhoto} />
+        <div style={{ position:'relative', borderTopLeftRadius:14, borderTopRightRadius:14, overflow:'hidden' }}>
+          <img src={photo} alt="meal" style={{ width:'100%', height:140, objectFit:'cover', display:'block' }} />
+          <div style={{ position:'absolute', top:6, right:6, display:'flex', gap:5 }}>
+            <button onClick={onGeneratePhoto} disabled={isGenerating}
+              title="Regenerate AI photo"
+              style={{ width:26, height:26, borderRadius:'50%', border:'none',
+                background:'rgba(0,0,0,0.5)', cursor:isGenerating ? 'default' : 'pointer',
+                display:'flex', alignItems:'center', justifyContent:'center',
+                opacity:isGenerating ? 0.5 : 1 }}>
+              <Wand2 size={13} color={T.gold} />
+            </button>
+            <button onClick={() => fileRef.current?.click()} title="Upload from photos"
+              style={{ width:26, height:26, borderRadius:'50%', border:'none',
+                background:'rgba(0,0,0,0.5)', cursor:'pointer',
+                display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <ImagePlus size={13} color="#fff" />
+            </button>
+            <button onClick={onRemovePhoto} title="Remove photo"
+              style={{ width:26, height:26, borderRadius:'50%', border:'none',
+                background:'rgba(0,0,0,0.5)', cursor:'pointer',
+                display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <X size={13} color="#fff" />
+            </button>
+          </div>
+        </div>
       ) : isGenerating ? (
         <div style={{ height:70, background:T.goldLight, borderTopLeftRadius:14, borderTopRightRadius:14,
           display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
           <Wand2 size={15} color={T.gold} />
           <span style={{ fontSize:12, color:T.gold, fontWeight:600 }}>Generating photo…</span>
+        </div>
+      ) : hasFood ? (
+        <div style={{ borderTopLeftRadius:14, borderTopRightRadius:14, display:'flex', alignItems:'center',
+          justifyContent:'flex-end', gap:6, padding:'8px 12px', borderBottom:`1px solid ${T.border}` }}>
+          <button onClick={onGeneratePhoto} disabled={isGenerating}
+            title="Generate AI photo"
+            style={{ width:30, height:30, borderRadius:'50%', border:`1.5px solid ${T.gold}`,
+              background:T.goldLight, cursor:isGenerating ? 'default' : 'pointer',
+              display:'flex', alignItems:'center', justifyContent:'center',
+              opacity:isGenerating ? 0.5 : 1 }}>
+            <Wand2 size={14} color={T.gold} />
+          </button>
+          <button onClick={() => fileRef.current?.click()} title="Upload from photos"
+            style={{ width:30, height:30, borderRadius:'50%', border:`1.5px solid ${T.border}`,
+              background:'transparent', cursor:'pointer',
+              display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <ImagePlus size={14} color={T.muted} />
+          </button>
         </div>
       ) : null}
 
@@ -107,17 +159,6 @@ export function MealCard({
                 cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
               {isChecked && <Check size={20} color="#fff" strokeWidth={2.5} />}
             </button>
-            {hasFood && !photo && (
-              <button onClick={onGeneratePhoto} disabled={isGenerating}
-                title="Generate meal photo with AI"
-                style={{ width:44, height:32, borderRadius:10,
-                  border:`1.5px solid ${T.gold}`, background:T.goldLight,
-                  cursor:isGenerating ? 'default' : 'pointer',
-                  display:'flex', alignItems:'center', justifyContent:'center',
-                  opacity:isGenerating ? 0.5 : 1 }}>
-                <Wand2 size={14} color={T.gold} />
-              </button>
-            )}
             {photoErr && !isGenerating && (
               <div style={{ fontSize:9, color:T.over, maxWidth:44, textAlign:'center', lineHeight:1.2,
                 wordBreak:'break-all', cursor:'pointer' }}

@@ -10,7 +10,7 @@ import { AddItemSheet } from './components/AddItemSheet.jsx';
 import { ProgressTab } from './components/ProgressTab.jsx';
 import { SettingsTab } from './components/SettingsTab.jsx';
 import { SavedMealsTab } from './components/SavedMealsTab.jsx';
-import { aiWeeklySummary, aiGeneratePlan } from './api.js';
+import { aiWeeklySummary, aiGeneratePlan, compressImage } from './api.js';
 
 export default function App() {
   const app = useAppData();
@@ -209,6 +209,7 @@ export default function App() {
                   onRemoveItem={idx => app.removeItem(s.key, idx)}
                   onRemovePhoto={() => app.removeSlotPhoto(s.key)}
                   onGeneratePhoto={() => handleGeneratePhoto(s.key)}
+                  onPickPhoto={async (dataUrl) => app.setSlotPhoto(s.key, await compressImage(dataUrl, 600, 0.75))}
                   onClearError={() => setPhotoErr(null)}
                   onCopy={() => copySlot(s.key)}
                   onPaste={() => pasteToSlot(s.key)}

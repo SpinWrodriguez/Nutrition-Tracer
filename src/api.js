@@ -1,9 +1,9 @@
 const USDA_KEY   = import.meta.env.VITE_USDA_KEY;
-const GEMINI_KEY = import.meta.env.VITE_GEMINI_KEY;
 const OPENAI_KEY = import.meta.env.VITE_OPENAI_KEY;
 
-const GEMINI_URL     = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent';
-const GEMINI_HEADERS = { 'Content-Type': 'application/json', 'X-goog-api-key': GEMINI_KEY };
+const OPENAI_URL     = 'https://api.openai.com/v1/chat/completions';
+const OPENAI_HEADERS = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_KEY}` };
+const OPENAI_MODEL   = 'gpt-4o-mini';
 
 const LIQUID_UNITS = ['ml', 'mls', 'milliliter', 'millilitre', 'milliliters', 'millilitres'];
 
@@ -11,8 +11,8 @@ const TEXT_NUTRITION_PROMPT = 'You are a precise nutrition expert. Look up or re
 
 const IMAGE_NUTRITION_PROMPT = 'You are a precise nutrition expert. Examine this food image carefully: (1) Identify the SPECIFIC food or dish — be specific like "Big Mac" not just "burger". (2) Estimate the portion size using visual cues like plate size, utensils, or packaging. (3) Recall accurate USDA/database nutrition values for that exact food and portion. Return macros for the ENTIRE visible portion shown. Respond ONLY with a JSON object, no markdown: {"name":"specific food name max 26 chars","k":<kcal int>,"p":<protein g int>,"c":<carbs g int>,"f":<fat g int>}';
 
-function parseGeminiResponse(data, fallbackName) {
-  const raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+function parseOpenAIResponse(data, fallbackName) {
+  const raw = data.choices?.[0]?.message?.content?.trim() || '';
   const m = raw.replace(/```[\s\S]*?```/g, '').match(/\{[\s\S]*\}/);
   const obj = JSON.parse(m ? m[0] : raw);
   return {
@@ -108,26 +108,37 @@ export async function fetchUSDAfoodDetail(fdcId) {
   };
 }
 
-/* ── Gemini AI ── */
+/* ── OpenAI AI ── */
 export async function aiEstimate(text) {
-  const res = await fetch(GEMINI_URL, {
+  const res = await fetch(OPENAI_URL, {
     method: 'POST',
-    headers: GEMINI_HEADERS,
-    body: JSON.stringify({ contents: [{ parts: [{ text: TEXT_NUTRITION_PROMPT + '\nFood: ' + text }] }] }),
+    headers: OPENAI_HEADERS,
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      messages: [{ role: 'user', content: TEXT_NUTRITION_PROMPT + '\nFood: ' + text }],
+      response_format: { type: 'json_object' },
+    }),
   });
-  return parseGeminiResponse(await res.json(), text);
+  return parseOpenAIResponse(await res.json(), text);
 }
 
 export async function aiEstimateFromImage(base64, mimeType) {
-  const res = await fetch(GEMINI_URL, {
+  const res = await fetch(OPENAI_URL, {
     method: 'POST',
-    headers: GEMINI_HEADERS,
-    body: JSON.stringify({ contents: [{ parts: [
-      { text: IMAGE_NUTRITION_PROMPT },
-      { inline_data: { mime_type: mimeType, data: base64 } },
-    ]}] }),
+    headers: OPENAI_HEADERS,
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'text', text: IMAGE_NUTRITION_PROMPT },
+          { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
+        ],
+      }],
+      response_format: { type: 'json_object' },
+    }),
   });
-  return parseGeminiResponse(await res.json(), 'Photo meal');
+  return parseOpenAIResponse(await res.json(), 'Photo meal');
 }
 
 /* ── AI weekly summary ── */
@@ -151,12 +162,16 @@ ${dayLines}
 Reply ONLY with JSON, no markdown:
 {"summary":"2-3 sentence overview","wins":["bullet1","bullet2"],"improvements":["bullet1"],"tip":"one actionable tip for next week"}`;
 
-  const res = await fetch(GEMINI_URL, {
-    method: 'POST', headers: GEMINI_HEADERS,
-    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+  const res = await fetch(OPENAI_URL, {
+    method: 'POST', headers: OPENAI_HEADERS,
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      messages: [{ role: 'user', content: prompt }],
+      response_format: { type: 'json_object' },
+    }),
   });
   const data = await res.json();
-  const raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+  const raw = data.choices?.[0]?.message?.content?.trim() || '';
   const m = raw.replace(/```[\s\S]*?```/g, '').match(/\{[\s\S]*\}/);
   return JSON.parse(m ? m[0] : raw);
 }
@@ -181,19 +196,18 @@ Eaten so far: ${ctx.eaten.k} kcal · ${ctx.eaten.p}g P · ${ctx.eaten.c}g C · $
 
 Confirm you have context.`;
 
-  const contents = [
-    { role: 'user',  parts: [{ text: system }] },
-    { role: 'model', parts: [{ text: 'Got it — I have your full day context. What would you like to know?' }] },
-    ...messages.map(m => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.text }] })),
+  const oaMessages = [
+    { role: 'system', content: system },
+    ...messages.map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text })),
   ];
 
-  const res = await fetch(GEMINI_URL, {
-    method: 'POST', headers: GEMINI_HEADERS,
-    body: JSON.stringify({ contents }),
+  const res = await fetch(OPENAI_URL, {
+    method: 'POST', headers: OPENAI_HEADERS,
+    body: JSON.stringify({ model: OPENAI_MODEL, messages: oaMessages }),
   });
   if (!res.ok) throw new Error(`API ${res.status}`);
   const data = await res.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || 'No response';
+  return data.choices?.[0]?.message?.content?.trim() || 'No response';
 }
 
 /* ── AI meal plan generation ── */
@@ -224,12 +238,16 @@ ${mealList}
 Reply ONLY with valid JSON — no markdown, no comments. Use this exact shape (include only slots you can fill):
 {"mon":{"breakfast":"name","morningSnack":"name","lunch":"name","afternoonSnack":"name","dinner":"name","snack":"name"},"tue":{...},"wed":{...},"thu":{...},"fri":{...},"sat":{...},"sun":{...}}`;
 
-  const res = await fetch(GEMINI_URL, {
-    method: 'POST', headers: GEMINI_HEADERS,
-    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+  const res = await fetch(OPENAI_URL, {
+    method: 'POST', headers: OPENAI_HEADERS,
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      messages: [{ role: 'user', content: prompt }],
+      response_format: { type: 'json_object' },
+    }),
   });
   const data = await res.json();
-  const raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+  const raw = data.choices?.[0]?.message?.content?.trim() || '';
   const m = raw.replace(/```[\s\S]*?```/g, '').match(/\{[\s\S]*\}/);
   return JSON.parse(m ? m[0] : raw);
 }
