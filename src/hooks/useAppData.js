@@ -253,6 +253,24 @@ export function useAppData() {
       return { ...d, selections: newSelections };
     });
 
+  const applyDayPlan = (date, slotPlan) =>
+    setData(d => {
+      const dm   = getDayMeta(date);
+      const base = d.selections[date] ? { ...d.selections[date] } : { ...(DEFAULTS[dm.id] || DEFAULTS.mon) };
+      SLOTS.forEach(sl => {
+        const existing = toArr(base[sl.key]).map(v => one(v)).filter(v => v && !v.skip);
+        if (existing.length > 0) return; // don't overwrite filled slots
+        const mealName = slotPlan[sl.key];
+        if (!mealName) return;
+        const saved = (d.savedMeals || []).find(m => m.n === mealName);
+        if (saved) {
+          const { id: _id, photo: _photo, ...item } = saved;
+          base[sl.key] = [{ ...item, custom: true }];
+        }
+      });
+      return { ...d, selections: { ...d.selections, [date]: base } };
+    });
+
   return {
     data,
     day, setDay, tab, setTab,
@@ -265,7 +283,7 @@ export function useAppData() {
     addItem, replaceItem, removeItem, setSlotItems,
     setSlotPhoto, removeSlotPhoto,
     toggleCheck, resetWeek, logWeight,
-    saveMeal, removeSavedMeal, setSavedMealPhoto, applyWeekPlan, syncPhotoToMealLib,
+    saveMeal, removeSavedMeal, setSavedMealPhoto, applyWeekPlan, applyDayPlan, syncPhotoToMealLib,
     weeklyNutrition, weeklyAvg, streak,
     importData,
   };

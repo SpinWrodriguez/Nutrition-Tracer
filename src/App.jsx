@@ -10,7 +10,7 @@ import { AddItemSheet } from './components/AddItemSheet.jsx';
 import { ProgressTab } from './components/ProgressTab.jsx';
 import { SettingsTab } from './components/SettingsTab.jsx';
 import { SavedMealsTab } from './components/SavedMealsTab.jsx';
-import { aiWeeklySummary, aiGeneratePlan, compressImage } from './api.js';
+import { aiWeeklySummary, aiGenerateDayPlan, compressImage } from './api.js';
 
 export default function App() {
   const app = useAppData();
@@ -80,13 +80,25 @@ export default function App() {
         })),
         checked: c,
       };
-    });
+    }).filter(d => d.slots.some(s => s.items.length > 0));
+    if (!days.length) throw new Error('No meals logged this week yet.');
     return aiWeeklySummary({ weekLabel, days, weights: app.weights, goals: app.goals });
   };
 
   const onAiPlan = async () => {
-    const plan = await aiGeneratePlan({ savedMeals: app.savedMeals, goals: app.goals, weekLabel });
-    app.applyWeekPlan(plan);
+    const dm = getDayMeta(day);
+    const s  = app.data.selections[day] || {};
+    const slotInfo = SLOTS.map(sl => {
+      const items = toArr(s[sl.key]).map(v => one(v)).filter(v => v && !v.skip);
+      return { key: sl.key, label: sl.label, hasItems: items.length > 0, summary: items.map(i => i.n).join(', ') };
+    });
+    const emptySlots    = slotInfo.filter(s => !s.hasItems).map(s => s.key);
+    const filledSummary = slotInfo.filter(s => s.hasItems).map(s => `${s.label}: ${s.summary}`).join('; ');
+    const plan = await aiGenerateDayPlan({
+      savedMeals: app.savedMeals, goals: app.goals,
+      dayLabel: dm.name, emptySlots, filledSummary,
+    });
+    app.applyDayPlan(day, plan);
   };
 
   return (
@@ -230,6 +242,7 @@ export default function App() {
             weeklyAvg={app.weeklyAvg}
             wStats={app.wStats}
             weekData={app.weekData}
+            allWeights={app.weights}
             streak={app.streak}
             goals={app.goals}
             onAiSummary={onAiSummary}

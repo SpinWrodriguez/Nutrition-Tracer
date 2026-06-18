@@ -152,15 +152,15 @@ export async function aiWeeklySummary({ weekLabel, days, weights, goals }) {
     return `${label}${w ? ` (${w.kg}kg)` : ''}:\n${lines}`;
   }).join('\n\n');
 
-  const prompt = `You are an encouraging nutrition coach giving a weekly review. Be specific and concise.
+  const prompt = `You are an encouraging nutrition coach giving a weekly review. Only the days provided below were logged — ignore any missing days entirely and base your summary solely on the data given.
 
 Goals: ${goals.kcal} kcal/day, ${goals.protein}g protein, focus on ${goals.focus}.
-Week: ${weekLabel}
+Week: ${weekLabel} (${days.length} day${days.length !== 1 ? 's' : ''} logged)
 
 ${dayLines}
 
 Reply ONLY with JSON, no markdown:
-{"summary":"2-3 sentence overview","wins":["bullet1","bullet2"],"improvements":["bullet1"],"tip":"one actionable tip for next week"}`;
+{"summary":"2-3 sentence overview of the logged days only","wins":["bullet1","bullet2"],"improvements":["bullet1"],"tip":"one actionable tip for next week"}`;
 
   const res = await fetch(OPENAI_URL, {
     method: 'POST', headers: OPENAI_HEADERS,
@@ -250,4 +250,47 @@ Reply ONLY with valid JSON — no markdown, no comments. Use this exact shape (i
   const raw = data.choices?.[0]?.message?.content?.trim() || '';
   const m = raw.replace(/```[\s\S]*?```/g, '').match(/\{[\s\S]*\}/);
   return JSON.parse(m ? m[0] : raw);
+}
+
+/* ── AI single-day plan (fills only empty slots) ── */
+export async function aiGenerateDayPlan({ savedMeals, goals, dayLabel, emptySlots, filledSummary }) {
+  if (!savedMeals.length) throw new Error('No saved meals');
+  if (!emptySlots.length) throw new Error('All slots are already filled for today');
+  const mealList = savedMeals.map((m, i) => `${i+1}. ${m.n} — ${m.k}kcal, ${m.p}P, ${m.c}C, ${m.f}F`).join('\n');
+  const focusNote = goals.focus === 'protein'
+    ? `Prioritise high-protein meals. Target: ${goals.protein}g protein for the day.`
+    : `Aim to stay close to ${goals.kcal} kcal total for the day.`;
+
+  const prompt = `You are a nutrition-focused meal planner. Fill ONLY the empty slots listed below for today.
+
+RULES:
+1. Use ONLY meal names from the available list — exact spelling, no substitutions.
+2. Only return keys for the empty slots: ${emptySlots.join(', ')}.
+3. Do NOT include already-filled slots in your response.
+4. ${focusNote}
+5. Keep it varied — avoid repeating the same meal across slots.
+
+Day: ${dayLabel}
+Already filled: ${filledSummary || 'nothing yet'}
+Empty slots to fill: ${emptySlots.join(', ')}
+Goals: ${goals.kcal} kcal/day, ${goals.protein}g protein, focus: ${goals.focus}.
+
+Available meals:
+${mealList}
+
+Reply ONLY with valid JSON — no markdown. Only include the empty slot keys:
+{"slotKey":"meal name"}`;
+
+  const res2 = await fetch(OPENAI_URL, {
+    method: 'POST', headers: OPENAI_HEADERS,
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      messages: [{ role: 'user', content: prompt }],
+      response_format: { type: 'json_object' },
+    }),
+  });
+  const data2 = await res2.json();
+  const raw2 = data2.choices?.[0]?.message?.content?.trim() || '';
+  const m2 = raw2.replace(/```[\s\S]*?```/g, '').match(/\{[\s\S]*\}/);
+  return JSON.parse(m2 ? m2[0] : raw2);
 }

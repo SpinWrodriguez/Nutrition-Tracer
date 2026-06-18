@@ -23,9 +23,24 @@ function AvgRow({ label, value, goal, unit, over }) {
   );
 }
 
-export function ProgressTab({ weeklyNutrition, weeklyAvg, wStats, weekData, streak, goals, onAiSummary, onAiPlan }) {
-  const hasWeight = weekData.some(d => d.kg !== null);
+export function ProgressTab({ weeklyNutrition, weeklyAvg, wStats, weekData, allWeights, streak, goals, onAiSummary, onAiPlan }) {
   const isProtein = goals.focus === 'protein';
+  const [weightFilter, setWeightFilter] = useState('week');
+
+  const weightChartData = (() => {
+    if (weightFilter === 'week') return weekData;
+    const entries = (allWeights || []).map(w => {
+      const d = new Date(w.date + 'T12:00:00');
+      return { day: d.toLocaleDateString('en-US', { month:'short', day:'numeric' }), date: w.date, kg: w.kg };
+    });
+    if (weightFilter === 'month') {
+      const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);
+      const cutoffStr = cutoff.toISOString().slice(0, 10);
+      return entries.filter(e => e.date >= cutoffStr);
+    }
+    return entries;
+  })();
+  const hasWeight = weightChartData.some(d => d.kg !== null);
 
   const barData  = weeklyNutrition.map(d => ({
     day:     d.day,
@@ -127,7 +142,20 @@ export function ProgressTab({ weeklyNutrition, weeklyAvg, wStats, weekData, stre
 
       {/* weight chart */}
       <div style={{ background:T.surface, borderRadius:20, padding:'16px 8px 12px 0', marginBottom:12, boxShadow:'0 1px 8px rgba(0,0,0,0.06)' }}>
-        <div style={{ ...NF, fontSize:11, letterSpacing:1.5, color:T.gold, fontWeight:700, paddingLeft:18, marginBottom:8 }}>WEIGHT TREND</div>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', paddingLeft:18, paddingRight:12, marginBottom:8 }}>
+          <div style={{ ...NF, fontSize:11, letterSpacing:1.5, color:T.gold, fontWeight:700 }}>WEIGHT TREND</div>
+          <div style={{ display:'flex', gap:4 }}>
+            {['week','month','all'].map(f => (
+              <button key={f} onClick={() => setWeightFilter(f)}
+                style={{ padding:'3px 9px', borderRadius:20, border:`1px solid ${weightFilter === f ? T.accent : T.border}`,
+                  background: weightFilter === f ? T.accentLight : 'transparent',
+                  color: weightFilter === f ? T.accent : T.muted,
+                  fontSize:10, fontWeight:600, cursor:'pointer', textTransform:'capitalize' }}>
+                {f}
+              </button>
+            ))}
+          </div>
+        </div>
         {!hasWeight ? (
           <p style={{ padding:'20px 18px', textAlign:'center', color:T.faint, fontSize:13 }}>
             Log your weight in Settings to build the trend.
@@ -135,7 +163,7 @@ export function ProgressTab({ weeklyNutrition, weeklyAvg, wStats, weekData, stre
         ) : (
           <div style={{ width:'100%', height:160 }}>
             <ResponsiveContainer>
-              <LineChart data={weekData} margin={{ top:4, right:16, bottom:2, left:0 }}>
+              <LineChart data={weightChartData} margin={{ top:4, right:16, bottom:2, left:0 }}>
                 <CartesianGrid stroke={T.border} vertical={false} />
                 <XAxis dataKey="day" tick={{ fontSize:10, fill:T.muted }} axisLine={{ stroke:T.border }} tickLine={false} />
                 <YAxis domain={['auto','auto']} tick={{ fontSize:10, fill:T.muted }} axisLine={false} tickLine={false} width={32} />
