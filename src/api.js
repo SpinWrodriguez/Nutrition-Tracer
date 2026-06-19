@@ -252,24 +252,23 @@ Reply ONLY with valid JSON — no markdown, no comments. Use this exact shape (i
   return JSON.parse(m ? m[0] : raw);
 }
 
-/* ── AI photo + chat analyzer ── */
+/* ── AI photo + chat analyzer (gpt-4o for accuracy) ── */
 export async function aiAnalyzeFood(messages) {
-  const system = `You are a precise nutrition expert embedded in a meal tracking app. Analyze food photos and descriptions to estimate macros accurately.
+  const system = `You are a precise nutrition expert. When given a food photo or description, reason through these steps before answering:
+
+1. IDENTIFY — What is the specific food/dish? Be exact (e.g. "Chicken Tikka Masala" not "curry", "Caffe Latte 12oz" not "coffee").
+2. PORTION — Estimate the weight/volume using reference objects (plate diameter ~26cm, fork ~19cm, hand size, packaging labels). State your estimate in grams or ml.
+3. LOOK UP — Recall the per-100g macros from USDA or a standard nutrition database for this exact food.
+4. CALCULATE — Multiply per-100g values by your portion estimate to get final macros.
+5. ADJUST — If the user provides corrections (label data, portion clarification, extra ingredients), redo steps 3-4 with the new information.
 
 ALWAYS respond with valid JSON only — no other text:
-{"reply":"1-2 sentence response","name":"specific food name max 26 chars","k":<kcal int>,"p":<protein g int>,"c":<carbs g int>,"f":<fat g int>}
-
-Guidelines:
-- Identify the specific food from the photo (e.g. "Grilled Chicken Breast" not "chicken")
-- Estimate portion size from visual cues (plate size, packaging, utensils)
-- Use USDA or standard nutrition databases for accuracy
-- When the user provides corrections (label values, portion sizes, extra ingredients), update all numbers immediately
-- Always provide your best estimate even when uncertain`;
+{"reply":"1-2 sentences summarising what you identified and your portion estimate","name":"specific food name max 26 chars","k":<kcal int>,"p":<protein g int>,"c":<carbs g int>,"f":<fat g int>}`;
 
   const res = await fetch(OPENAI_URL, {
     method: 'POST', headers: OPENAI_HEADERS,
     body: JSON.stringify({
-      model: OPENAI_MODEL,
+      model: 'gpt-4o',
       messages: [{ role: 'system', content: system }, ...messages],
       response_format: { type: 'json_object' },
     }),
