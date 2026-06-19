@@ -7,6 +7,7 @@ import { MacroGauge, NavBtn } from './components/ui.jsx';
 import { MealCard } from './components/MealCard.jsx';
 import { AiChat } from './components/AiChat.jsx';
 import { AddItemSheet } from './components/AddItemSheet.jsx';
+import { AnalyzeSheet } from './components/AnalyzeSheet.jsx';
 import { ProgressTab } from './components/ProgressTab.jsx';
 import { SettingsTab } from './components/SettingsTab.jsx';
 import { SavedMealsTab } from './components/SavedMealsTab.jsx';
@@ -26,7 +27,8 @@ export default function App() {
   });
 
   // clipboard: { slotKey, items, label, fromDay }
-  const [clipboard, setClipboard] = useState(null);
+  const [clipboard,    setClipboard]    = useState(null);
+  const [analyzeSlot,  setAnalyzeSlot]  = useState(null);
 
   const { day, setDay, tab, setTab, meta, sel, chk, photos, eaten, planned, adh } = app;
   const { openSheet, closeSheet, open, generatingSlot, photoErr, setPhotoErr, handleGeneratePhoto } = sheet;
@@ -298,7 +300,21 @@ export default function App() {
       </div>
 
       {/* ── add / edit item sheet ── */}
-      {open && <AddItemSheet sheet={sheet} />}
+      {open && (
+        <AddItemSheet sheet={sheet} onOpenAnalyze={() => {
+          const key = sheet.slotMeta?.key;
+          sheet.closeSheet();
+          setAnalyzeSlot(key);
+        }} />
+      )}
+
+      {/* ── photo + chat analyzer sheet ── */}
+      <AnalyzeSheet
+        open={!!analyzeSlot}
+        slotMeta={SLOTS.find(s => s.key === analyzeSlot)}
+        onClose={() => setAnalyzeSlot(null)}
+        onConfirm={(item) => { app.addItem(analyzeSlot, item); setAnalyzeSlot(null); }}
+      />
     </div>
   );
 }

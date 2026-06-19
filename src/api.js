@@ -252,6 +252,33 @@ Reply ONLY with valid JSON — no markdown, no comments. Use this exact shape (i
   return JSON.parse(m ? m[0] : raw);
 }
 
+/* ── AI photo + chat analyzer ── */
+export async function aiAnalyzeFood(messages) {
+  const system = `You are a precise nutrition expert embedded in a meal tracking app. Analyze food photos and descriptions to estimate macros accurately.
+
+ALWAYS respond with valid JSON only — no other text:
+{"reply":"1-2 sentence response","name":"specific food name max 26 chars","k":<kcal int>,"p":<protein g int>,"c":<carbs g int>,"f":<fat g int>}
+
+Guidelines:
+- Identify the specific food from the photo (e.g. "Grilled Chicken Breast" not "chicken")
+- Estimate portion size from visual cues (plate size, packaging, utensils)
+- Use USDA or standard nutrition databases for accuracy
+- When the user provides corrections (label values, portion sizes, extra ingredients), update all numbers immediately
+- Always provide your best estimate even when uncertain`;
+
+  const res = await fetch(OPENAI_URL, {
+    method: 'POST', headers: OPENAI_HEADERS,
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      messages: [{ role: 'system', content: system }, ...messages],
+      response_format: { type: 'json_object' },
+    }),
+  });
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  const data = await res.json();
+  return JSON.parse(data.choices?.[0]?.message?.content?.trim() || '{}');
+}
+
 /* ── AI single-day plan (fills only empty slots) ── */
 export async function aiGenerateDayPlan({ savedMeals, goals, dayLabel, emptySlots, filledSummary }) {
   if (!savedMeals.length) throw new Error('No saved meals');

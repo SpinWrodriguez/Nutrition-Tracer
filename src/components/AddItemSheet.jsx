@@ -1,18 +1,16 @@
-import { Camera, Database, Droplets, Plus, Sparkles, X } from 'lucide-react';
+import { Database, Droplets, Plus, X, ScanSearch } from 'lucide-react';
 import { T, NF, inp } from '../constants.js';
 
-export function AddItemSheet({ sheet }) {
+export function AddItemSheet({ sheet, onOpenAnalyze }) {
   const {
     open, slotMeta, editIdx,
     query, hits, pick, grams, setGrams, unit, scaledDraft,
-    draft, setDraft, qty, setQty, busy, aiErr,
+    draft, setDraft, qty, setQty,
     usdaHits, usdaLoading, fetchingDetail,
-    imgPreview, setImgPreview, isLiquid, setIsLiquid,
-    camRef,
+    isLiquid, setIsLiquid,
     savedMeals,
     closeSheet, onQuery,
     handlePickAFCD, handlePickUSDA, clearPick,
-    runAI, handleImageCapture,
     confirmScaled, confirmDraft, confirmSavedMeal,
   } = sheet;
 
@@ -45,44 +43,13 @@ export function AddItemSheet({ sheet }) {
             </button>
           </div>
 
-          {/* search + camera */}
+          {/* search */}
           <div style={{ position:'relative', marginBottom:12 }}>
             <Database size={16} color={T.faint} style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)' }} />
             <input value={query} onChange={e => onQuery(e.target.value)}
-              placeholder="Search foods or describe a meal…"
-              style={{ ...inp, paddingLeft:38, paddingRight:44 }} autoFocus />
-            <button onClick={() => camRef.current?.click()}
-              style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)',
-                background:'none', border:'none', cursor:'pointer', padding:4, display:'flex', alignItems:'center' }}>
-              <Camera size={18} color={T.muted} />
-            </button>
-            <input ref={camRef} type="file" accept="image/*" capture="environment"
-              style={{ display:'none' }}
-              onChange={async e => {
-                const file = e.target.files?.[0];
-                if (file) await handleImageCapture(file);
-                e.target.value = '';
-              }}
-            />
+              placeholder="Search foods…"
+              style={{ ...inp, paddingLeft:38 }} autoFocus />
           </div>
-
-          {/* image preview */}
-          {imgPreview && (
-            <div style={{ position:'relative', marginBottom:12 }}>
-              <img src={imgPreview} alt="food" style={{ width:'100%', maxHeight:160, objectFit:'cover', borderRadius:12 }} />
-              <button onClick={() => { setImgPreview(null); setDraft(null); }}
-                style={{ position:'absolute', top:6, right:6, background:'rgba(0,0,0,0.5)', border:'none',
-                  borderRadius:'50%', width:24, height:24, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                <X size={13} color="#fff" />
-              </button>
-              {busy && (
-                <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.35)', borderRadius:12,
-                  display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontSize:13, fontWeight:600 }}>
-                  Estimating…
-                </div>
-              )}
-            </div>
-          )}
 
           {/* AFCD results */}
           {hits.length > 0 && !pick && (
@@ -202,20 +169,16 @@ export function AddItemSheet({ sheet }) {
             </div>
           )}
 
-          {/* AI estimate button */}
+          {/* analyze with AI */}
           {!pick && (
-            <>
-              <button onClick={runAI} disabled={busy || !query.trim()}
-                style={{ width:'100%', padding:'13px', borderRadius:12, border:'none',
-                  background: busy || !query.trim() ? T.border : T.ink,
-                  color: busy || !query.trim() ? T.muted : '#fff',
-                  fontSize:14, fontWeight:600, cursor: busy || !query.trim() ? 'default' : 'pointer',
-                  display:'flex', alignItems:'center', justifyContent:'center', gap:6, marginBottom:8 }}>
-                <Sparkles size={15} />
-                {busy ? 'Estimating…' : hits.length > 0 ? 'Not a match — estimate with AI' : 'Estimate macros with AI'}
-              </button>
-              {aiErr && <p style={{ fontSize:12, color:T.over, marginBottom:8 }}>{aiErr}</p>}
-            </>
+            <button onClick={onOpenAnalyze}
+              style={{ width:'100%', padding:'13px', borderRadius:12, border:'none',
+                background:T.accent, color:'#fff',
+                fontSize:14, fontWeight:600, cursor:'pointer',
+                display:'flex', alignItems:'center', justifyContent:'center', gap:6, marginBottom:8 }}>
+              <ScanSearch size={15} />
+              Analyze photo with AI
+            </button>
           )}
 
           {/* draft editor — shown after AI estimate or when editing a custom item */}

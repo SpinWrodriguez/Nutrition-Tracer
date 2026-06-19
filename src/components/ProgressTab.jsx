@@ -29,16 +29,34 @@ export function ProgressTab({ weeklyNutrition, weeklyAvg, wStats, weekData, allW
 
   const weightChartData = (() => {
     if (weightFilter === 'week') return weekData;
-    const entries = (allWeights || []).map(w => {
-      const d = new Date(w.date + 'T12:00:00');
-      return { day: d.toLocaleDateString('en-US', { month:'short', day:'numeric' }), date: w.date, kg: w.kg };
-    });
+    const weights = allWeights || [];
     if (weightFilter === 'month') {
       const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);
       const cutoffStr = cutoff.toISOString().slice(0, 10);
-      return entries.filter(e => e.date >= cutoffStr);
+      return weights
+        .filter(w => w.date >= cutoffStr)
+        .map(w => {
+          const d = new Date(w.date + 'T12:00:00');
+          return { day: d.toLocaleDateString('en-US', { month:'short', day:'numeric' }), date: w.date, kg: w.kg };
+        });
     }
-    return entries;
+    // 'all' — group by month, average kg
+    const byMonth = {};
+    weights.forEach(w => {
+      const key = w.date.slice(0, 7);
+      if (!byMonth[key]) byMonth[key] = [];
+      byMonth[key].push(w.kg);
+    });
+    return Object.entries(byMonth)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, kgs]) => {
+        const d = new Date(key + '-15T12:00:00');
+        return {
+          day: d.toLocaleDateString('en-US', { month:'short', year:'2-digit' }),
+          date: key,
+          kg: +( kgs.reduce((s, k) => s + k, 0) / kgs.length ).toFixed(1),
+        };
+      });
   })();
   const hasWeight = weightChartData.some(d => d.kg !== null);
 
