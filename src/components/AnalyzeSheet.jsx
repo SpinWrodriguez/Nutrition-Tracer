@@ -25,18 +25,18 @@ export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm }) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [displayMsgs, busy]);
 
-  const send = async (text, photoDataUrl = null) => {
-    if (!text.trim() && !photoDataUrl) return;
+  const send = async (text) => {
+    const isFirst = apiMsgs.length === 0;
+    if (!text.trim() && (!isFirst || !photos.length)) return;
     setBusy(true); setErr(null);
 
-    const displayText = text || 'Analyze this food photo';
+    const displayText = text || 'Analyze these photos and estimate the macros.';
     setDisplayMsgs(prev => [...prev, { role: 'user', text: displayText }]);
     setInput('');
 
-    const userMsg = photoDataUrl
+    const userMsg = (isFirst && photos.length)
       ? { role: 'user', content: [
-          ...(Array.isArray(photoDataUrl) ? photoDataUrl : [photoDataUrl])
-            .map(url => ({ type: 'image_url', image_url: { url } })),
+          ...photos.map(url => ({ type: 'image_url', image_url: { url } })),
           { type: 'text', text: text || 'Analyze these food photos and estimate the macros as accurately as possible.' },
         ]}
       : { role: 'user', content: text };
@@ -63,10 +63,10 @@ export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm }) {
       reader.onload = async (ev) => resolve(await compressImage(ev.target.result, 800, 0.8));
       reader.readAsDataURL(file);
     })));
-    const next = [...photos, ...compressed];
-    setPhotos(next);
-    await send('Analyze these food photos and estimate the macros as accurately as possible.', next);
+    setPhotos(prev => [...prev, ...compressed]);
   };
+
+  const canSend = !busy && (input.trim() || (apiMsgs.length === 0 && photos.length > 0));
 
   const handleConfirm = () => {
     if (!macros) return;
@@ -201,14 +201,14 @@ export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm }) {
           {/* text input + send */}
           <div style={{ display:'flex', gap:8, marginBottom: hasEstimate ? 8 : 0 }}>
             <input value={input} onChange={e => setInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !busy) send(input); }}
-              placeholder={displayMsgs.length === 0 ? 'Describe the food or add a photo…' : 'Refine: "label says 320 kcal", "add extra cheese"…'}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && canSend) send(input); }}
+              placeholder={displayMsgs.length === 0 ? 'Add photos above, type context, then send…' : 'Refine: "label says 320 kcal", "add extra cheese"…'}
               style={{ ...inp, flex:1, fontSize:13 }}
               disabled={busy} />
-            <button onClick={() => send(input)} disabled={busy || !input.trim()}
+            <button onClick={() => send(input)} disabled={!canSend}
               style={{ width:44, height:44, borderRadius:12, border:'none', flexShrink:0,
-                background: busy || !input.trim() ? T.border : T.accent,
-                cursor: busy || !input.trim() ? 'default' : 'pointer',
+                background: canSend ? T.accent : T.border,
+                cursor: canSend ? 'pointer' : 'default',
                 display:'flex', alignItems:'center', justifyContent:'center' }}>
               <Send size={16} color="#fff" />
             </button>
