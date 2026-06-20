@@ -8,6 +8,7 @@ export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm }) {
   const [displayMsgs, setDisplayMsgs] = useState([]);
   const [apiMsgs,     setApiMsgs]     = useState([]);
   const [macros,      setMacros]      = useState(null);
+  const [bestPhotoIdx, setBestPhotoIdx] = useState(-1);
   const [input,       setInput]       = useState('');
   const [busy,        setBusy]        = useState(false);
   const [err,         setErr]         = useState(null);
@@ -17,7 +18,7 @@ export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm }) {
   useEffect(() => {
     if (open) {
       setPhotos([]); setDisplayMsgs([]); setApiMsgs([]);
-      setMacros(null); setInput(''); setErr(null); setBusy(false);
+      setMacros(null); setInput(''); setErr(null); setBusy(false); setBestPhotoIdx(-1);
     }
   }, [open]);
 
@@ -48,6 +49,7 @@ export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm }) {
       setApiMsgs([...nextApiMsgs, { role: 'assistant', content: JSON.stringify(result) }]);
       setDisplayMsgs(prev => [...prev, { role: 'assistant', text: result.reply || '' }]);
       setMacros({ n: result.name || '', k: String(result.k ?? 0), p: String(result.p ?? 0), c: String(result.c ?? 0), f: String(result.f ?? 0) });
+      if (isFirst && typeof result.photo_index === 'number' && result.photo_index >= 0) setBestPhotoIdx(result.photo_index);
     } catch (e) {
       setErr(e.message || 'Something went wrong');
     }
@@ -70,14 +72,16 @@ export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm }) {
 
   const handleConfirm = () => {
     if (!macros) return;
-    onConfirm({
+    const item = {
       custom: true,
       n: macros.n || 'Custom meal',
       k: Math.max(0, Math.round(+macros.k || 0)),
       p: Math.max(0, Math.round(+macros.p || 0)),
       c: Math.max(0, Math.round(+macros.c || 0)),
       f: Math.max(0, Math.round(+macros.f || 0)),
-    });
+    };
+    const bestPhoto = bestPhotoIdx >= 0 && photos[bestPhotoIdx] ? photos[bestPhotoIdx] : null;
+    onConfirm(item, bestPhoto);
   };
 
   if (!open) return null;

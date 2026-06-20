@@ -292,7 +292,7 @@ export function useAppData() {
     addItem, replaceItem, removeItem, setSlotItems,
     setSlotPhoto, removeSlotPhoto,
     toggleCheck, resetWeek, logWeight,
-    saveMeal, removeSavedMeal, setSavedMealPhoto, applyWeekPlan, applyDayPlan, syncPhotoToMealLib,
+    saveMeal, removeSavedMeal, setSavedMealPhoto, updateSavedMeal, createSavedMeal, applyWeekPlan, applyDayPlan, syncPhotoToMealLib,
     weeklyNutrition, weeklyAvg, streak,
     importData,
   };

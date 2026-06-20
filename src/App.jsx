@@ -271,6 +271,8 @@ export default function App() {
             savedMeals={app.savedMeals}
             removeSavedMeal={app.removeSavedMeal}
             setSavedMealPhoto={app.setSavedMealPhoto}
+            updateSavedMeal={app.updateSavedMeal}
+            createSavedMeal={app.createSavedMeal}
             addItem={app.addItem}
             setSlotPhoto={app.setSlotPhoto}
           />
@@ -313,7 +315,7 @@ export default function App() {
         open={!!analyzeSlot}
         slotMeta={SLOTS.find(s => s.key === analyzeSlot)}
         onClose={() => setAnalyzeSlot(null)}
-        onConfirm={(item) => { app.addItem(analyzeSlot, item); setAnalyzeSlot(null); }}
+        onConfirm={(item, photo) => { app.addItem(analyzeSlot, item); if (photo) app.setSlotPhoto(analyzeSlot, photo); setAnalyzeSlot(null); }}
       />
     </div>
   );

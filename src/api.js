@@ -261,9 +261,10 @@ export async function aiAnalyzeFood(messages) {
 3. LOOK UP — Recall the per-100g macros from USDA or a standard nutrition database for this exact food.
 4. CALCULATE — Multiply per-100g values by your portion estimate to get final macros.
 5. ADJUST — If the user provides corrections (label data, portion clarification, extra ingredients), redo steps 3-4 with the new information.
+6. BEST PHOTO — If multiple photos were provided, identify which one shows the food most clearly and completely. Set photo_index to its 0-based position in the order they were sent. If only one photo, use 0. If no photos, use -1.
 
 ALWAYS respond with valid JSON only — no other text:
-{"reply":"1-2 sentences summarising what you identified and your portion estimate","name":"specific food name max 26 chars","k":<kcal int>,"p":<protein g int>,"c":<carbs g int>,"f":<fat g int>}`;
+{"reply":"1-2 sentences summarising what you identified and your portion estimate","name":"specific food name max 26 chars","k":<kcal int>,"p":<protein g int>,"c":<carbs g int>,"f":<fat g int>,"photo_index":<int>}`;
 
   const res = await fetch(OPENAI_URL, {
     method: 'POST', headers: OPENAI_HEADERS,
