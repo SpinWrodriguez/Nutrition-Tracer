@@ -162,13 +162,15 @@ export function useItemSheet({ sel, day, addItem, replaceItem, setSlotPhoto, sav
 
   const handleGeneratePhoto = async slotKey => {
     const items = toArr(sel[slotKey]);
-    const names = items.filter(v => one(v) && !one(v)?.skip).map(v => one(v).n).join(', ');
+    const realItems = items.filter(v => one(v) && !one(v)?.skip);
+    const names = realItems.map(v => one(v).n).join(', ');
     if (!names || generatingSlot) return;
     setGeneratingSlot(slotKey); setPhotoErr(null);
     try {
       const photo = await generateFoodPhoto(names);
       setSlotPhoto(slotKey, photo);
-      if (syncPhotoToMealLib) syncPhotoToMealLib(slotKey, photo);
+      // Only sync to saved meals library when the slot has exactly one item
+      if (realItems.length === 1 && syncPhotoToMealLib) syncPhotoToMealLib(slotKey, photo);
     } catch (err) { setPhotoErr(err.message); console.error('Photo generation failed:', err); }
     setGeneratingSlot(null);
   };

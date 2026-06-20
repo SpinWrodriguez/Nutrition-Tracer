@@ -225,6 +225,15 @@ export function useAppData() {
   const setSavedMealPhoto = (id, photo) =>
     setData(d => ({ ...d, savedMeals: (d.savedMeals || []).map(m => m.id === id ? { ...m, photo } : m) }));
 
+  const updateSavedMeal = (id, updates) =>
+    setData(d => ({ ...d, savedMeals: (d.savedMeals || []).map(m => m.id === id ? { ...m, ...updates } : m) }));
+
+  const createSavedMeal = (item, photo = null) =>
+    setData(d => {
+      const id = String(Date.now() + Math.random());
+      return { ...d, savedMeals: [...(d.savedMeals || []), { id, ...item, photo }] };
+    });
+
   // Apply AI-generated week plan: planByDayId is { mon: { breakfast: "name", ... }, ... }
   // Maps meal names to savedMeals entries and writes them into the current week's dates
   const importData = (raw) => {
