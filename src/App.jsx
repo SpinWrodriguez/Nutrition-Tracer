@@ -26,9 +26,33 @@ export default function App() {
     savedMeals:         app.savedMeals,
   });
 
+  const [savedEditMeal, setSavedEditMeal] = useState(null);
+
+  const savedMealsSheet = useItemSheet({
+    sel: {}, day: app.day,
+    addItem: () => {}, replaceItem: () => {}, setSlotPhoto: () => {},
+    saveMeal: null, syncPhotoToMealLib: null,
+    savedMeals: app.savedMeals,
+    onConfirmItem: (item, photo) => {
+      if (savedEditMeal) {
+        app.updateSavedMeal(savedEditMeal.id, { n: item.n, k: item.k, p: item.p, c: item.c, f: item.f });
+        if (photo) app.setSavedMealPhoto(savedEditMeal.id, photo);
+        setSavedEditMeal(null);
+      } else {
+        app.createSavedMeal(item, photo);
+      }
+    },
+  });
+
+  const openEditSavedMeal = (meal) => {
+    setSavedEditMeal(meal);
+    savedMealsSheet.openSheet('saved', null, { custom: true, n: meal.n, k: meal.k, p: meal.p, c: meal.c, f: meal.f });
+  };
+
   // clipboard: { slotKey, items, label, fromDay }
-  const [clipboard,    setClipboard]    = useState(null);
-  const [analyzeSlot,  setAnalyzeSlot]  = useState(null);
+  const [clipboard,     setClipboard]    = useState(null);
+  const [analyzeSlot,   setAnalyzeSlot]  = useState(null);
+  const [analyzeSaved,  setAnalyzeSaved] = useState(false);
 
   const { day, setDay, tab, setTab, meta, sel, chk, photos, eaten, planned, adh } = app;
   const { openSheet, closeSheet, open, generatingSlot, photoErr, setPhotoErr, handleGeneratePhoto } = sheet;
@@ -271,10 +295,10 @@ export default function App() {
             savedMeals={app.savedMeals}
             removeSavedMeal={app.removeSavedMeal}
             setSavedMealPhoto={app.setSavedMealPhoto}
-            updateSavedMeal={app.updateSavedMeal}
-            createSavedMeal={app.createSavedMeal}
             addItem={app.addItem}
             setSlotPhoto={app.setSlotPhoto}
+            onOpenAddSheet={() => savedMealsSheet.openSheet('saved')}
+            onEditSavedMeal={openEditSavedMeal}
           />
         )}
       </div>
@@ -301,7 +325,7 @@ export default function App() {
         <NavBtn active={tab==='settings'} onClick={() => setTab('settings')} icon={<Settings size={20}/>}  label="Settings" />
       </div>
 
-      {/* ── add / edit item sheet ── */}
+      {/* ── add / edit item sheet (plan) ── */}
       {open && (
         <AddItemSheet sheet={sheet} onOpenAnalyze={() => {
           const key = sheet.slotMeta?.key;
@@ -310,12 +334,33 @@ export default function App() {
         }} />
       )}
 
-      {/* ── photo + chat analyzer sheet ── */}
+      {/* ── add / edit item sheet (saved meals library) ── */}
+      {savedMealsSheet.open && (
+        <AddItemSheet
+          sheet={{
+            ...savedMealsSheet,
+            slotMeta: { label: savedEditMeal ? savedEditMeal.n : 'Saved Meals', key: 'saved' },
+            closeSheet: () => { savedMealsSheet.closeSheet(); setSavedEditMeal(null); },
+          }}
+          forceEditMode={!!savedEditMeal}
+          onOpenAnalyze={() => { savedMealsSheet.closeSheet(); setSavedEditMeal(null); setAnalyzeSaved(true); }}
+        />
+      )}
+
+      {/* ── photo + chat analyzer sheet (plan slot) ── */}
       <AnalyzeSheet
         open={!!analyzeSlot}
         slotMeta={SLOTS.find(s => s.key === analyzeSlot)}
         onClose={() => setAnalyzeSlot(null)}
         onConfirm={(item, photo) => { app.addItem(analyzeSlot, item); if (photo) app.setSlotPhoto(analyzeSlot, photo); setAnalyzeSlot(null); }}
+      />
+
+      {/* ── photo + chat analyzer sheet (saved meals) ── */}
+      <AnalyzeSheet
+        open={analyzeSaved}
+        slotMeta={{ label: 'Saved Meals' }}
+        onClose={() => setAnalyzeSaved(false)}
+        onConfirm={(item, photo) => { app.createSavedMeal(item, photo); setAnalyzeSaved(false); }}
       />
     </div>
   );

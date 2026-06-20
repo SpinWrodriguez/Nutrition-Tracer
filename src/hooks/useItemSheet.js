@@ -6,7 +6,7 @@ import {
   generateFoodPhoto, compressImage,
 } from '../api.js';
 
-export function useItemSheet({ sel, day, addItem, replaceItem, setSlotPhoto, saveMeal, syncPhotoToMealLib, savedMeals }) {
+export function useItemSheet({ sel, day, addItem, replaceItem, setSlotPhoto, saveMeal, syncPhotoToMealLib, savedMeals, onConfirmItem }) {
   const [open,           setOpen]           = useState(null);
   const [editIdx,        setEditIdx]        = useState(null);
   const [query,          setQuery]          = useState('');
@@ -44,19 +44,23 @@ export function useItemSheet({ sel, day, addItem, replaceItem, setSlotPhoto, sav
   };
 
   const confirmItem = (slot, val, photo = null) => {
-    if (editIdx !== null) { replaceItem(slot, editIdx, val); }
-    else { addItem(slot, val); }
-    if (photo) setSlotPhoto(slot, photo);
+    if (onConfirmItem) {
+      onConfirmItem(val, photo);
+    } else {
+      if (editIdx !== null) { replaceItem(slot, editIdx, val); }
+      else { addItem(slot, val); }
+      if (photo) setSlotPhoto(slot, photo);
+    }
     reset(); setOpen(null);
   };
 
   /* ── public handlers ── */
-  const openSheet = (slot, editItemIdx = null) => {
+  const openSheet = (slot, editItemIdx = null, initialDraft = null) => {
     reset();
     setOpen(slot);
+    setDraft(initialDraft || { custom: true, n: '', k: 0, p: 0, c: 0, f: 0 });
     if (editItemIdx === null) return;
     setEditIdx(editItemIdx);
-    // Use sel (current day's selections) instead of raw data
     const items = toArr(sel[slot]);
     const o = one(items[editItemIdx]);
     if (!o || o.skip) return;
@@ -73,7 +77,7 @@ export function useItemSheet({ sel, day, addItem, replaceItem, setSlotPhoto, sav
   const closeSheet = () => { setOpen(null); reset(); };
 
   const onQuery = val => {
-    setQuery(val); setDraft(null); setAiErr(null); setPick(null); setQty('1');
+    setQuery(val); setAiErr(null); setPick(null); setQty('1');
     setHits(val.trim().length >= 2 ? searchAFCD(val) : []);
     setUsdaHits([]);
     if (usdaTimer.current) clearTimeout(usdaTimer.current);
@@ -148,7 +152,7 @@ export function useItemSheet({ sel, day, addItem, replaceItem, setSlotPhoto, sav
       f: Math.round(draft.f * q),
     };
     const photo = imgPreview ? await compressImage(imgPreview) : null;
-    if (saveMeal) saveMeal({ n: final.n, k: final.k, p: final.p, c: final.c, f: final.f }, photo);
+    if (!onConfirmItem && saveMeal) saveMeal({ n: final.n, k: final.k, p: final.p, c: final.c, f: final.f }, photo);
     confirmItem(open, final, photo);
   };
 

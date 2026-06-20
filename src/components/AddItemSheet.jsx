@@ -1,7 +1,7 @@
 import { Database, Droplets, Plus, X, ScanSearch } from 'lucide-react';
 import { T, NF, inp } from '../constants.js';
 
-export function AddItemSheet({ sheet, onOpenAnalyze }) {
+export function AddItemSheet({ sheet, onOpenAnalyze, forceEditMode = false }) {
   const {
     open, slotMeta, editIdx,
     query, hits, pick, grams, setGrams, unit, scaledDraft,
@@ -32,7 +32,7 @@ export function AddItemSheet({ sheet, onOpenAnalyze }) {
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
             <div>
               <div style={{ ...NF, fontSize:11, letterSpacing:1.5, color:T.muted, fontWeight:600 }}>
-                {editIdx !== null ? 'EDITING' : 'ADDING TO'}
+                {editIdx !== null || forceEditMode ? 'EDITING' : 'ADDING TO'}
               </div>
               <div style={{ fontSize:17, fontWeight:700, color:T.ink }}>{slotMeta?.label}</div>
             </div>
@@ -162,7 +162,7 @@ export function AddItemSheet({ sheet, onOpenAnalyze }) {
                     style={{ width:'100%', padding:'13px', borderRadius:12, border:'none',
                       background:T.accent, color:'#fff', fontSize:14, fontWeight:600, cursor:'pointer',
                       display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
-                    <Plus size={16} /> {editIdx !== null ? 'Save changes' : `Add to ${slotMeta?.label.toLowerCase()}`}
+                    <Plus size={16} /> {editIdx !== null || forceEditMode ? 'Save changes' : `Add to ${slotMeta?.label.toLowerCase()}`}
                   </button>
                 </>
               )}
@@ -181,8 +181,8 @@ export function AddItemSheet({ sheet, onOpenAnalyze }) {
             </button>
           )}
 
-          {/* draft editor — shown after AI estimate or when editing a custom item */}
-          {draft && !pick && (
+          {/* draft editor — always visible when no food is picked from search */}
+          {!pick && draft && (
             <div style={{ border:`1.5px solid ${T.border}`, borderRadius:16, padding:14, marginBottom:12 }}>
               <input value={draft.n} onChange={e => setDraft(d => ({ ...d, n: e.target.value }))}
                 style={{ ...inp, fontWeight:700, fontSize:15, marginBottom:10 }} placeholder="Meal name" />
@@ -217,20 +217,20 @@ export function AddItemSheet({ sheet, onOpenAnalyze }) {
                 style={{ width:'100%', padding:'13px', borderRadius:12, border:'none',
                   background:T.ok, color:'#fff', fontSize:14, fontWeight:600, cursor:'pointer',
                   display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
-                <Plus size={16} /> {editIdx !== null ? 'Save changes' : `Add to ${slotMeta?.label.toLowerCase()}`}
+                <Plus size={16} /> {editIdx !== null || forceEditMode ? 'Save changes' : `Add to ${slotMeta?.label.toLowerCase()}`}
               </button>
             </div>
           )}
 
-          {/* saved meals — hidden when editing */}
-          {editIdx === null && (
+          {/* saved meals — hidden when editing or when in saved meals context */}
+          {editIdx === null && slotMeta?.key !== 'saved' && (
             <div style={{ marginBottom:8 }}>
               <div style={{ fontSize:11, color:T.muted, fontWeight:600, letterSpacing:1, marginBottom:8 }}>
                 SAVED MEALS
               </div>
               {savedMeals.length === 0 ? (
                 <p style={{ fontSize:13, color:T.faint, textAlign:'center', padding:'16px 0' }}>
-                  No saved meals yet — use "Estimate macros with AI" to save meals.
+                  No saved meals yet — analyze a photo or add manually above.
                 </p>
               ) : (
                 savedMeals
