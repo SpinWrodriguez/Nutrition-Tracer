@@ -1,21 +1,33 @@
 import { useState } from 'react';
-import { Mail } from 'lucide-react';
+import { Mail, ArrowLeft } from 'lucide-react';
 import { T, NF, inp } from '../constants.js';
 
-export function LoginScreen({ signIn }) {
+export function LoginScreen({ signIn, verifyOtp }) {
   const [email,   setEmail]   = useState('');
-  const [sent,    setSent]    = useState(false);
+  const [code,    setCode]    = useState('');
+  const [step,    setStep]    = useState('email'); // 'email' | 'code'
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState(null);
 
-  const handleSubmit = async (e) => {
+  const handleSend = async (e) => {
     e.preventDefault();
     if (!email.trim()) return;
     setLoading(true);
     setError(null);
     const err = await signIn(email.trim());
-    if (err) { setError(err.message); setLoading(false); }
-    else { setSent(true); setLoading(false); }
+    if (err) { setError(err.message); }
+    else { setStep('code'); }
+    setLoading(false);
+  };
+
+  const handleVerify = async (e) => {
+    e.preventDefault();
+    if (code.length !== 6) return;
+    setLoading(true);
+    setError(null);
+    const err = await verifyOtp(email.trim(), code.trim());
+    if (err) { setError('Invalid or expired code. Try again.'); setCode(''); }
+    setLoading(false);
   };
 
   return (
@@ -31,45 +43,57 @@ export function LoginScreen({ signIn }) {
 
         <div style={{ background:T.surface, borderRadius:24, padding:'28px 24px',
           boxShadow:'0 4px 24px rgba(0,0,0,0.08)' }}>
-          {sent ? (
-            <div style={{ textAlign:'center', padding:'8px 0' }}>
-              <div style={{ fontSize:48, marginBottom:16 }}>📬</div>
-              <div style={{ ...NF, fontSize:20, fontWeight:700, color:T.ink, marginBottom:10 }}>
-                Check your email
-              </div>
-              <div style={{ fontSize:13, color:T.muted, lineHeight:1.6 }}>
-                Magic link sent to <b style={{ color:T.ink }}>{email}</b>.
-                <br />Tap it to sign in — no password needed.
-              </div>
-              <button onClick={() => setSent(false)}
-                style={{ marginTop:20, background:'none', border:'none', color:T.muted,
-                  fontSize:12, cursor:'pointer', textDecoration:'underline' }}>
-                Use a different email
-              </button>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit}>
+
+          {step === 'email' ? (
+            <form onSubmit={handleSend}>
               <div style={{ ...NF, fontSize:11, letterSpacing:1.5, color:T.gold, fontWeight:700, marginBottom:14 }}>
                 SIGN IN
               </div>
               <div style={{ fontSize:13, color:T.muted, marginBottom:20, lineHeight:1.5 }}>
-                Enter your email and we'll send a magic link — no password required.
+                Enter your email and we'll send a 6-digit code.
               </div>
               <input
                 type="email" value={email} onChange={e => setEmail(e.target.value)}
                 placeholder="your@email.com" required autoFocus
-                style={{ ...inp, width:'100%', marginBottom:12 }}
+                style={{ ...inp, width:'100%', boxSizing:'border-box', marginBottom:12 }}
               />
-              {error && (
-                <div style={{ fontSize:12, color:T.over, marginBottom:12 }}>{error}</div>
-              )}
+              {error && <div style={{ fontSize:12, color:T.over, marginBottom:12 }}>{error}</div>}
               <button type="submit" disabled={loading}
                 style={{ width:'100%', padding:'14px', borderRadius:14, border:'none',
                   background: loading ? T.border : T.accent, color:'#fff',
                   fontSize:15, fontWeight:600, cursor: loading ? 'default' : 'pointer',
                   display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
                 <Mail size={16} />
-                {loading ? 'Sending…' : 'Send magic link'}
+                {loading ? 'Sending…' : 'Send code'}
+              </button>
+            </form>
+
+          ) : (
+            <form onSubmit={handleVerify}>
+              <button type="button" onClick={() => { setStep('email'); setCode(''); setError(null); }}
+                style={{ background:'none', border:'none', cursor:'pointer', color:T.muted,
+                  display:'flex', alignItems:'center', gap:4, fontSize:12, marginBottom:16, padding:0 }}>
+                <ArrowLeft size={13} /> {email}
+              </button>
+              <div style={{ ...NF, fontSize:11, letterSpacing:1.5, color:T.gold, fontWeight:700, marginBottom:14 }}>
+                ENTER CODE
+              </div>
+              <div style={{ fontSize:13, color:T.muted, marginBottom:20, lineHeight:1.5 }}>
+                Check your email for a 6-digit code.
+              </div>
+              <input
+                type="text" value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="000000" required autoFocus
+                inputMode="numeric" pattern="[0-9]*"
+                style={{ ...inp, width:'100%', boxSizing:'border-box', marginBottom:12,
+                  fontSize:28, textAlign:'center', letterSpacing:8, fontWeight:700 }}
+              />
+              {error && <div style={{ fontSize:12, color:T.over, marginBottom:12 }}>{error}</div>}
+              <button type="submit" disabled={loading || code.length !== 6}
+                style={{ width:'100%', padding:'14px', borderRadius:14, border:'none',
+                  background: (loading || code.length !== 6) ? T.border : T.accent, color:'#fff',
+                  fontSize:15, fontWeight:600, cursor: (loading || code.length !== 6) ? 'default' : 'pointer' }}>
+                {loading ? 'Verifying…' : 'Verify'}
               </button>
             </form>
           )}

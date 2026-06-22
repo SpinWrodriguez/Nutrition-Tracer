@@ -21,12 +21,17 @@ export function useAuth() {
   const signIn = async (email) => {
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: window.location.origin + import.meta.env.BASE_URL },
+      options: { shouldCreateUser: true },
     });
+    return error;
+  };
+
+  const verifyOtp = async (email, token) => {
+    const { error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
     return error;
   };
 
   const signOut = () => supabase.auth.signOut();
 
-  return { session, loading, signIn, signOut, user: session?.user ?? null };
+  return { session, loading, signIn, verifyOtp, signOut, user: session?.user ?? null };
 }
