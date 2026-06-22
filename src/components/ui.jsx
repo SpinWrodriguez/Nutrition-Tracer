@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { T, NF } from '../constants.js';
 
@@ -36,12 +37,32 @@ export function MacroGauge({ icon, label, value, goal, unit, color }) {
   );
 }
 
-export function StatCard({ label, value, unit, color }) {
+export function StatCard({ label, value, unit, color, description }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    const t = setTimeout(() => document.addEventListener('click', handler), 0);
+    return () => { clearTimeout(t); document.removeEventListener('click', handler); };
+  }, [open]);
+
   return (
-    <div style={{ background:T.surface, borderRadius:16, padding:'14px 10px', textAlign:'center', boxShadow:'0 1px 6px rgba(0,0,0,0.05)' }}>
+    <div ref={ref} onClick={() => description && setOpen(v => !v)}
+      style={{ background:T.surface, borderRadius:16, padding:'14px 10px', textAlign:'center',
+        boxShadow:'0 1px 6px rgba(0,0,0,0.05)', cursor:description ? 'pointer' : 'default',
+        userSelect:'none', WebkitUserSelect:'none' }}>
       <div style={{ fontSize:11, color:T.muted, textTransform:'uppercase', letterSpacing:0.5, marginBottom:4 }}>{label}</div>
       <div style={{ ...NF, fontSize:24, fontWeight:700, color:color||T.ink }}>{value}</div>
       <div style={{ fontSize:11, color:T.faint }}>{unit}</div>
+      {open && description && (
+        <div style={{ fontSize:11, color:T.muted, marginTop:6, lineHeight:1.4, fontStyle:'italic' }}>
+          {description}
+        </div>
+      )}
     </div>
   );
 }

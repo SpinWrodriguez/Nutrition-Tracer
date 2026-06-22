@@ -1,35 +1,40 @@
 import { useRef, useState } from 'react';
-import { Plus, Download, Upload, CheckCircle, AlertCircle } from 'lucide-react';
+import { Plus, Download, Upload, CheckCircle, AlertCircle, LogOut } from 'lucide-react';
 import { T, NF, inp } from '../constants.js';
 import { StatCard } from './ui.jsx';
 
-export function SettingsTab({ wInput, setWInput, day, logWeight, wStats, goals, updateGoals, theme, toggleTheme, data, importData }) {
+export function SettingsTab({ wInput, setWInput, day, logWeight, wStats, goals, updateGoals, theme, toggleTheme, getBackupData, importData, userEmail, onSignOut }) {
   const fileRef = useRef(null);
-  const [importStatus, setImportStatus] = useState(null); // 'ok' | 'err'
+  const [importStatus, setImportStatus] = useState(null); // 'ok' | 'err' | 'downloading'
   const dayLabel = (() => {
     try { return new Date(day + 'T12:00:00').toLocaleDateString('en-AU', { weekday:'long', month:'short', day:'numeric' }); }
     catch { return day; }
   })();
 
-  const handleDownload = () => {
-    const json = JSON.stringify(data, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = `nutrition-tracer-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const handleDownload = async () => {
+    setImportStatus('downloading');
+    try {
+      const data = await getBackupData();
+      const json = JSON.stringify(data, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = `nutrition-tracer-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {}
+    setImportStatus(null);
   };
 
   const handleUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       try {
         const raw = JSON.parse(ev.target.result);
-        importData(raw);
+        await importData(raw);
         setImportStatus('ok');
       } catch {
         setImportStatus('err');
@@ -52,7 +57,7 @@ export function SettingsTab({ wInput, setWInput, day, logWeight, wStats, goals, 
         <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:6 }}>
           <input value={wInput} onChange={e => setWInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && logWeight()}
-            inputMode="decimal" placeholder="87.5"
+            inputMode="decimal" placeholder={wStats?.current != null ? `${wStats.current}` : '87.5'}
             style={{ ...inp, flex:1 }} />
           <span style={{ color:T.muted, fontSize:14, flexShrink:0 }}>kg</span>
           <button onClick={logWeight}
@@ -64,14 +69,17 @@ export function SettingsTab({ wInput, setWInput, day, logWeight, wStats, goals, 
         </div>
         {wStats && (
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginTop:10 }}>
-            <StatCard label="Current" value={`${wStats.current}`} unit="kg" />
+            <StatCard label="Current" value={wStats.current.toFixed(1)} unit="kg"
+              description="Your most recent weigh-in" />
             <StatCard label="Change"
-              value={wStats.change === null ? '—' : `${wStats.change > 0 ? '+' : ''}${wStats.change}`}
+              value={wStats.change === null ? '—' : `${wStats.change > 0 ? '+' : ''}${wStats.change.toFixed(1)}`}
               unit="kg"
-              color={wStats.change === null ? T.muted : wStats.change < 0 ? T.ok : wStats.change > 0 ? T.over : T.ink} />
+              color={wStats.change === null ? T.muted : wStats.change < 0 ? T.ok : wStats.change > 0 ? T.over : T.ink}
+              description="Total difference between your first and most recent entry" />
             <StatCard label="Per week" unit="kg"
-              value={wStats.perWk == null ? '—' : `${wStats.perWk > 0 ? '+' : ''}${wStats.perWk}`}
-              color={wStats.perWk == null ? T.muted : wStats.perWk < 0 ? T.ok : T.over} />
+              value={wStats.perWk == null ? '—' : `${wStats.perWk > 0 ? '+' : ''}${wStats.perWk.toFixed(2)}`}
+              color={wStats.perWk == null ? T.muted : wStats.perWk < 0 ? T.ok : T.over}
+              description="Average weekly rate of change based on all entries" />
           </div>
         )}
       </div>
@@ -140,11 +148,13 @@ export function SettingsTab({ wInput, setWInput, day, logWeight, wStats, goals, 
           Download your meals, plans, weights and saved meals as a JSON file. Upload to restore on any device.
         </p>
         <div style={{ display:'flex', gap:8 }}>
-          <button onClick={handleDownload}
+          <button onClick={handleDownload} disabled={importStatus === 'downloading'}
             style={{ flex:1, padding:'12px', borderRadius:12, border:`1.5px solid ${T.border}`,
-              background:'transparent', cursor:'pointer', display:'flex', alignItems:'center',
-              justifyContent:'center', gap:7, fontSize:13, fontWeight:600, color:T.ink }}>
-            <Download size={15} color={T.accentSoft} /> Download
+              background:'transparent', cursor: importStatus === 'downloading' ? 'default' : 'pointer',
+              display:'flex', alignItems:'center', justifyContent:'center', gap:7,
+              fontSize:13, fontWeight:600, color: importStatus === 'downloading' ? T.faint : T.ink }}>
+            <Download size={15} color={importStatus === 'downloading' ? T.faint : T.accentSoft} />
+            {importStatus === 'downloading' ? 'Preparing…' : 'Download'}
           </button>
           <button onClick={() => fileRef.current?.click()}
             style={{ flex:1, padding:'12px', borderRadius:12, border:'none',
@@ -165,6 +175,22 @@ export function SettingsTab({ wInput, setWInput, day, logWeight, wStats, goals, 
           </div>
         )}
       </div>
+
+      {/* account */}
+      {userEmail && (
+        <div style={{ background:T.surface, borderRadius:20, padding:'16px 18px', marginTop:12, boxShadow:'0 1px 8px rgba(0,0,0,0.06)' }}>
+          <div style={{ ...NF, fontSize:11, letterSpacing:1.5, color:T.gold, fontWeight:700, marginBottom:12 }}>ACCOUNT</div>
+          <div style={{ fontSize:13, color:T.muted, marginBottom:14 }}>
+            Signed in as <b style={{ color:T.ink }}>{userEmail}</b>
+          </div>
+          <button onClick={onSignOut}
+            style={{ width:'100%', padding:'12px', borderRadius:12, border:`1.5px solid ${T.border}`,
+              background:'transparent', cursor:'pointer', display:'flex', alignItems:'center',
+              justifyContent:'center', gap:7, fontSize:13, fontWeight:600, color:T.over }}>
+            <LogOut size={15} /> Sign out
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -76,6 +76,11 @@ export const DEFAULTS = {
 };
 
 /* ── helpers ── */
+// Use local calendar date (not UTC) so Australian users don't get "yesterday"
+export const localDateISO = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+};
 export const todayId  = () => ['sun','mon','tue','wed','thu','fri','sat'][new Date().getDay()];
 export const toArr    = v => Array.isArray(v) ? v : (v ? [v] : []);
 export const one      = v => typeof v === 'string' ? (OPT[v] ? { ...OPT[v] } : null) : v;

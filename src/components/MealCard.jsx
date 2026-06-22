@@ -5,8 +5,8 @@ import { T, NF, one } from '../constants.js';
 export function MealCard({
   slot, items, totals, isChecked, skipOnly,
   photo, hasFood, isGenerating, photoErr,
-  clipboard, focus,
-  onCheck, onAdd, onEdit, onRemoveItem, onRemovePhoto, onGeneratePhoto, onPickPhoto, onClearError, onCopy, onPaste, onCancelCopy, onSaveItem,
+  clipboard, focus, savedMealNames,
+  onCheck, onAdd, onEdit, onRemoveItem, onRemovePhoto, onGeneratePhoto, onPickPhoto, onClearError, onCopy, onPaste, onCancelCopy, onSaveItem, onUnsaveItem,
 }) {
   const fileRef = useRef(null);
   const handleFilePick = (e) => {
@@ -118,23 +118,33 @@ export function MealCard({
                   if (!o || o.skip) return null;
                   return (
                     <div key={idx} style={{ marginBottom:5 }}>
-                      <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:0 }}>
                         <button onClick={() => onRemoveItem(idx)}
-                          style={{ background:'none', border:'none', cursor:'pointer', padding:'2px', display:'flex', alignItems:'center', flexShrink:0 }}>
-                          <X size={12} color={T.faint} />
+                          style={{ width:32, height:32, background:'none', border:'none', cursor:'pointer', flexShrink:0,
+                            display:'flex', alignItems:'center', justifyContent:'center', borderRadius:8 }}>
+                          <X size={14} color={T.faint} />
                         </button>
+                        <span style={{ flex:1, fontSize:14, fontWeight:600, color:T.ink, minWidth:0 }}>{o.n}</span>
+                        {o.custom && <span style={{ fontSize:10, color:T.accentSoft, fontWeight:600, marginRight:2 }}>CUSTOM</span>}
                         <button onClick={() => onEdit(idx)}
-                          style={{ background:'none', border:'none', cursor:'pointer', padding:'2px', display:'flex', alignItems:'center', flexShrink:0 }}>
-                          <Pencil size={11} color={T.faint} />
+                          style={{ width:32, height:32, background:'none', border:'none', cursor:'pointer', flexShrink:0,
+                            display:'flex', alignItems:'center', justifyContent:'center', borderRadius:8 }}>
+                          <Pencil size={13} color={T.faint} />
                         </button>
-                        <button onClick={() => onSaveItem && onSaveItem(o)} title="Save to favourites"
-                          style={{ background:'none', border:'none', cursor:'pointer', padding:'2px', display:'flex', alignItems:'center', flexShrink:0 }}>
-                          <Star size={11} color={T.gold} />
-                        </button>
-                        <span style={{ fontSize:14, fontWeight:600, color:T.ink }}>{o.n}</span>
-                        {o.custom && <span style={{ fontSize:10, color:T.accentSoft, fontWeight:600 }}>CUSTOM</span>}
+                        {(() => {
+                          const isSaved = savedMealNames?.has(o.n.toLowerCase()) ?? false;
+                          return (
+                            <button
+                              onClick={() => isSaved ? onUnsaveItem && onUnsaveItem(o) : onSaveItem && onSaveItem(o)}
+                              title={isSaved ? 'Remove from favourites' : 'Save to favourites'}
+                              style={{ width:32, height:32, background:'none', border:'none', cursor:'pointer', flexShrink:0,
+                                display:'flex', alignItems:'center', justifyContent:'center', borderRadius:8 }}>
+                              <Star size={13} color={T.gold} fill={isSaved ? T.gold : 'none'} />
+                            </button>
+                          );
+                        })()}
                       </div>
-                      <div style={{ ...NF, fontSize:12, color:T.muted, paddingLeft:36 }}>
+                      <div style={{ ...NF, fontSize:12, color:T.muted, paddingLeft:32 }}>
                         {macroLine(o)}
                       </div>
                     </div>
@@ -142,7 +152,7 @@ export function MealCard({
                 })}
                 {items.filter(v => one(v) && !one(v).skip).length > 1 && (
                   <div style={{ ...NF, fontSize:12, fontWeight:700, color:T.accentSoft,
-                    marginTop:6, paddingTop:6, borderTop:`1px dashed ${T.border}`, paddingLeft:36 }}>
+                    marginTop:6, paddingTop:6, borderTop:`1px dashed ${T.border}`, paddingLeft:32 }}>
                     {totalLine}
                   </div>
                 )}

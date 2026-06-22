@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Flame, Dumbbell, TrendingUp, Star, ChevronLeft, ChevronRight, Settings } from 'lucide-react';
-import { T, NF, sf, SLOTS, toArr, one, sumSlot, isSkipOnly, getDayMeta } from './constants.js';
+import { T, NF, sf, SLOTS, toArr, one, sumSlot, isSkipOnly, getDayMeta, localDateISO } from './constants.js';
 import { useAppData } from './hooks/useAppData.js';
+import { useAuth } from './hooks/useAuth.js';
+import { LoginScreen } from './components/LoginScreen.jsx';
 import { useItemSheet } from './hooks/useItemSheet.js';
 import { MacroGauge, NavBtn } from './components/ui.jsx';
 import { MealCard } from './components/MealCard.jsx';
@@ -14,7 +16,8 @@ import { SavedMealsTab } from './components/SavedMealsTab.jsx';
 import { aiWeeklySummary, aiGenerateDayPlan, compressImage } from './api.js';
 
 export default function App() {
-  const app = useAppData();
+  const { session, loading: authLoading, signIn, signOut, user } = useAuth();
+  const app = useAppData(user?.id ?? null);
   const sheet = useItemSheet({
     sel:          app.sel,
     day:          app.day,
@@ -55,9 +58,10 @@ export default function App() {
   const [analyzeSaved,  setAnalyzeSaved] = useState(false);
 
   const { day, setDay, tab, setTab, meta, sel, chk, photos, eaten, planned, adh } = app;
+  const savedMealNames = useMemo(() => new Set(app.savedMeals.map(m => m.n.toLowerCase())), [app.savedMeals]);
   const { openSheet, closeSheet, open, generatingSlot, photoErr, setPhotoErr, handleGeneratePhoto } = sheet;
 
-  const todayISO = new Date().toISOString().slice(0, 10);
+  const todayISO = localDateISO();
 
   /* ── theme toggle ── */
   const [theme, setTheme] = useState(() => localStorage.getItem('nt-theme') || 'green');
@@ -67,6 +71,19 @@ export default function App() {
     localStorage.setItem('nt-theme', theme);
   }, [theme]);
   const toggleTheme = () => setTheme(t => t === 'green' ? 'blue' : 'green');
+
+  const handleSignOut = async () => {
+    app.clearLocalData();
+    await signOut();
+  };
+
+  if (authLoading) return (
+    <div style={{ minHeight:'100svh', background:T.bg, display:'flex', alignItems:'center', justifyContent:'center' }}>
+      <div style={{ ...NF, fontSize:14, color:T.muted }}>Loading…</div>
+    </div>
+  );
+
+  if (!session && !import.meta.env.DEV) return <LoginScreen signIn={signIn} />;
 
   /* ── week label for header ── */
   const weekLabel = (() => {
@@ -253,7 +270,12 @@ export default function App() {
                   onPaste={() => pasteToSlot(s.key)}
                   onCancelCopy={() => setClipboard(null)}
                   onSaveItem={item => app.saveMeal({ n:item.n, k:item.k, p:item.p, c:item.c, f:item.f }, photo)}
+                  onUnsaveItem={item => {
+                    const saved = app.savedMeals.find(m => m.n.toLowerCase() === item.n.toLowerCase());
+                    if (saved) app.removeSavedMeal(saved.id);
+                  }}
                   focus={app.goals.focus}
+                  savedMealNames={savedMealNames}
                 />
               );
             })}
@@ -285,7 +307,8 @@ export default function App() {
             wStats={app.wStats}
             goals={app.goals} updateGoals={app.updateGoals}
             theme={theme} toggleTheme={toggleTheme}
-            data={app.data} importData={app.importData}
+            getBackupData={app.getFullBackup} importData={app.importData}
+            userEmail={user?.email} onSignOut={handleSignOut}
           />
         )}
 

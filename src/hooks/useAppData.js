@@ -1,20 +1,108 @@
 import { useState, useEffect, useMemo } from 'react';
-import { STORE, DAYS, SLOTS, DEFAULTS, OPT, toArr, one, sumSlot, isSkipOnly, getDayMeta, getWeekStart, getWeekDates } from '../constants.js';
-import { freshData, normalizeData } from '../data.js';
+import { STORE, DAYS, SLOTS, DEFAULTS, OPT, toArr, one, sumSlot, isSkipOnly, getDayMeta, getWeekStart, getWeekDates, localDateISO } from '../constants.js';
+import { freshData, normalizeData, extractOldPhotos } from '../data.js';
+import { photoSet, photoDel, photoClear, photoGetAll } from '../db.js';
+import { supabase } from '../supabase.js';
+import { storageUpload, storageDelete, storageSync, storageUploadAll } from '../storage.js';
 
-export function useAppData() {
+export function useAppData(userId = null) {
   const [data, setData] = useState(() => {
     try { const s = localStorage.getItem(STORE); if (s) return normalizeData(JSON.parse(s)); } catch {}
     return freshData();
   });
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateISO();
   const [day,    setDay]    = useState(today);
   const [tab,    setTab]    = useState('plan');
   const [wInput, setWInput] = useState('');
 
+  // Photo state — backed by IndexedDB, not localStorage
+  const [slotPhotos, setSlotPhotos] = useState({});  // { date: { slotKey: base64 } }
+  const [mealPhotos, setMealPhotos] = useState({});   // { mealId: base64 }
+
+  // Persist text data only — photos are in IndexedDB
   useEffect(() => {
-    try { localStorage.setItem(STORE, JSON.stringify(data)); } catch {}
+    try {
+      localStorage.setItem(STORE, JSON.stringify(data));
+    } catch (e) {
+      if (e.name === 'QuotaExceededError' || e.code === 22) {
+        // Trim oldest weight entries as a last resort
+        try { localStorage.setItem(STORE, JSON.stringify({ ...data, weights: (data.weights || []).slice(-365) })); } catch {}
+      }
+    }
   }, [data]);
+
+  // Load data + photos from Supabase when user logs in
+  useEffect(() => {
+    if (!userId) return;
+    (async () => {
+      // ── text data ──
+      const { data: row, error } = await supabase
+        .from('nutrition_data').select('data').eq('id', userId).single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('[Supabase] load error:', error);
+      } else if (row?.data) {
+        const normalized = normalizeData(row.data);
+        setData(normalized);
+        try { localStorage.setItem(STORE, JSON.stringify(normalized)); } catch {}
+      } else {
+        // First login — push existing localStorage data to Supabase
+        const local = JSON.parse(localStorage.getItem(STORE) || 'null');
+        if (local) {
+          const { error: e } = await supabase
+            .from('nutrition_data').upsert({ id: userId, data: local });
+          if (e) console.error('[Supabase] first-login upsert error:', e);
+        }
+      }
+
+      // ── photos — download any missing from Supabase Storage ──
+      const updated = await storageSync(userId);
+      if (updated) {
+        setSlotPhotos(updated.slots);
+        setMealPhotos(updated.meals);
+      }
+    })();
+  }, [userId]);
+
+  // Debounced save to Supabase on every data change
+  useEffect(() => {
+    if (!userId) return;
+    const t = setTimeout(() => {
+      supabase.from('nutrition_data')
+        .upsert({ id: userId, data })
+        .then(({ error }) => { if (error) console.error('[Supabase] save error:', error); });
+    }, 2000);
+    return () => clearTimeout(t);
+  }, [data, userId]);
+
+  // Load photos from IndexedDB; run one-time migration of old localStorage photos
+  useEffect(() => {
+    photoGetAll().then(({ slots, meals }) => {
+      setSlotPhotos(slots);
+      setMealPhotos(meals);
+    }).catch(() => {});
+
+    try {
+      const raw = JSON.parse(localStorage.getItem(STORE) || 'null');
+      const old = extractOldPhotos(raw);
+      const entries = [
+        ...Object.entries(old.slots).flatMap(([date, slotMap]) =>
+          Object.entries(slotMap).map(([slot, photo]) => [`slot:${date}:${slot}`, photo])
+        ),
+        ...Object.entries(old.meals).map(([id, photo]) => [`meal:${id}`, photo]),
+      ];
+      if (!entries.length) return;
+
+      Promise.all(entries.map(([key, photo]) => photoSet(key, photo))).then(() => {
+        setSlotPhotos(old.slots);
+        setMealPhotos(old.meals);
+        // Strip photos from localStorage now that they're safely in IndexedDB
+        const { photos: _p, ...stripped } = raw || {};
+        const cleaned = { ...stripped, savedMeals: (stripped.savedMeals || []).map(({ photo: _ph, ...m }) => m) };
+        try { localStorage.setItem(STORE, JSON.stringify(cleaned)); } catch {}
+      }).catch(() => {});
+    } catch {}
+  }, []); // run once on mount
 
   /* ── derived week ── */
   const weekStart = useMemo(() => getWeekStart(day), [day]);
@@ -35,8 +123,13 @@ export function useAppData() {
   const defaultSel = DEFAULTS[meta.id] || DEFAULTS.mon;
   const sel        = data.selections[day] || defaultSel;
   const chk        = data.checked[day]    || {};
-  const photos     = data.photos?.[day]   || {};
-  const savedMeals = data.savedMeals      || [];
+  const photos     = slotPhotos[day]      || {};
+
+  // Merge meal photos from IndexedDB back into savedMeals objects
+  const savedMeals = useMemo(() =>
+    (data.savedMeals || []).map(m => ({ ...m, photo: mealPhotos[m.id] ?? null })),
+    [data.savedMeals, mealPhotos]
+  );
 
   const eaten = useMemo(() => SLOTS.reduce((a, s) => {
     if (chk[s.key]) { const t = sumSlot(sel[s.key]); a.k+=t.k; a.p+=t.p; a.c+=t.c; a.f+=t.f; }
@@ -98,7 +191,7 @@ export function useAppData() {
 
   const streak = useMemo(() => {
     let count = 0;
-    const d = new Date(new Date().toISOString().slice(0, 10) + 'T12:00:00');
+    const d = new Date(localDateISO() + 'T12:00:00');
     d.setDate(d.getDate() - 1);
     for (let i = 0; i < 365; i++) {
       const dateStr = d.toISOString().slice(0, 10);
@@ -119,7 +212,7 @@ export function useAppData() {
     return count;
   }, [data, goals]);
 
-  /* ── mutators (all keyed by `day` ISO date) ── */
+  /* ── item mutators ── */
 
   const addItem = (slot, val) =>
     setData(d => {
@@ -160,14 +253,46 @@ export function useAppData() {
       return { ...d, selections: { ...d.selections, [day]: { ...base, [slot]: items } } };
     });
 
-  const setSlotPhoto = (slotKey, photo) =>
-    setData(d => ({ ...d, photos: { ...d.photos, [day]: { ...(d.photos?.[day] || {}), [slotKey]: photo } } }));
+  /* ── photo mutators — write to IndexedDB + update local state ── */
 
-  const removeSlotPhoto = (slotKey) =>
-    setData(d => {
-      const dp = { ...(d.photos?.[day] || {}) }; delete dp[slotKey];
-      return { ...d, photos: { ...d.photos, [day]: dp } };
+  const setSlotPhoto = (slotKey, photo) => {
+    const idbKey = `slot:${day}:${slotKey}`;
+    photoSet(idbKey, photo).catch(() => {});
+    storageUpload(userId, idbKey, photo);
+    setSlotPhotos(p => ({ ...p, [day]: { ...(p[day] || {}), [slotKey]: photo } }));
+  };
+
+  const removeSlotPhoto = (slotKey) => {
+    const idbKey = `slot:${day}:${slotKey}`;
+    photoDel(idbKey).catch(() => {});
+    storageDelete(userId, idbKey);
+    setSlotPhotos(p => {
+      const dp = { ...(p[day] || {}) }; delete dp[slotKey];
+      return { ...p, [day]: dp };
     });
+  };
+
+  const setSavedMealPhoto = (id, photo) => {
+    const idbKey = `meal:${id}`;
+    photoSet(idbKey, photo).catch(() => {});
+    storageUpload(userId, idbKey, photo);
+    setMealPhotos(p => ({ ...p, [id]: photo }));
+  };
+
+  const syncPhotoToMealLib = (slotKey, photo) => {
+    const items = toArr(sel[slotKey]).map(v => one(v)).filter(o => o && !o.skip);
+    if (!items.length) return;
+    (data.savedMeals || []).forEach(m => {
+      if (items.some(o => o.n.toLowerCase() === m.n.toLowerCase())) {
+        const idbKey = `meal:${m.id}`;
+        photoSet(idbKey, photo).catch(() => {});
+        storageUpload(userId, idbKey, photo);
+        setMealPhotos(p => ({ ...p, [m.id]: photo }));
+      }
+    });
+  };
+
+  /* ── other mutators ── */
 
   const toggleCheck = slot =>
     setData(d => ({ ...d, checked: { ...d.checked, [day]: { ...(d.checked[day] || {}), [slot]: !(d.checked[day]?.[slot]) } } }));
@@ -191,53 +316,45 @@ export function useAppData() {
   const updateGoals = (updates) =>
     setData(d => ({ ...d, goals: { ...(d.goals || {}), ...updates } }));
 
-  /* When a slot photo is generated, silently sync it to any matching saved meal */
-  const syncPhotoToMealLib = (slotKey, photo) =>
-    setData(d => {
-      const dm   = getDayMeta(day);
-      const def  = DEFAULTS[dm.id] || DEFAULTS.mon;
-      const items = toArr((d.selections[day] || def)[slotKey])
-        .map(v => one(v)).filter(o => o && !o.skip);
-      if (!items.length) return d;
-      return {
-        ...d,
-        savedMeals: (d.savedMeals || []).map(m =>
-          items.some(o => o.n.toLowerCase() === m.n.toLowerCase()) ? { ...m, photo } : m
-        ),
-      };
-    });
-
-  const saveMeal = (item, photo = null) =>
-    setData(d => {
-      const id = String(Date.now() + Math.random());
-      const existing = (d.savedMeals || []).find(m => m.n.toLowerCase() === item.n.toLowerCase());
-      if (existing) {
-        if (!existing.photo && photo)
-          return { ...d, savedMeals: d.savedMeals.map(m => m.id === existing.id ? { ...m, photo } : m) };
-        return d;
+  const saveMeal = (item, photo = null) => {
+    const id = String(Date.now() + Math.random());
+    const existing = (data.savedMeals || []).find(m => m.n.toLowerCase() === item.n.toLowerCase());
+    if (existing) {
+      if (!mealPhotos[existing.id] && photo) {
+        photoSet(`meal:${existing.id}`, photo).catch(() => {});
+        storageUpload(userId, `meal:${existing.id}`, photo);
+        setMealPhotos(p => ({ ...p, [existing.id]: photo }));
       }
-      return { ...d, savedMeals: [...(d.savedMeals || []), { id, ...item, photo }] };
-    });
+      return;
+    }
+    if (photo) {
+      photoSet(`meal:${id}`, photo).catch(() => {});
+      storageUpload(userId, `meal:${id}`, photo);
+      setMealPhotos(p => ({ ...p, [id]: photo }));
+    }
+    setData(d => ({ ...d, savedMeals: [...(d.savedMeals || []), { id, ...item }] }));
+  };
 
-  const removeSavedMeal = id =>
+  const removeSavedMeal = (id) => {
+    photoDel(`meal:${id}`).catch(() => {});
+    storageDelete(userId, `meal:${id}`);
+    setMealPhotos(p => { const n = { ...p }; delete n[id]; return n; });
     setData(d => ({ ...d, savedMeals: (d.savedMeals || []).filter(m => m.id !== id) }));
+  };
 
-  const setSavedMealPhoto = (id, photo) =>
-    setData(d => ({ ...d, savedMeals: (d.savedMeals || []).map(m => m.id === id ? { ...m, photo } : m) }));
+  const setSavedMealPhotoAlias = setSavedMealPhoto; // keep name consistent
 
   const updateSavedMeal = (id, updates) =>
     setData(d => ({ ...d, savedMeals: (d.savedMeals || []).map(m => m.id === id ? { ...m, ...updates } : m) }));
 
-  const createSavedMeal = (item, photo = null) =>
-    setData(d => {
-      const id = String(Date.now() + Math.random());
-      return { ...d, savedMeals: [...(d.savedMeals || []), { id, ...item, photo }] };
-    });
-
-  // Apply AI-generated week plan: planByDayId is { mon: { breakfast: "name", ... }, ... }
-  // Maps meal names to savedMeals entries and writes them into the current week's dates
-  const importData = (raw) => {
-    try { setData(normalizeData(raw)); } catch {}
+  const createSavedMeal = (item, photo = null) => {
+    const id = String(Date.now() + Math.random());
+    if (photo) {
+      photoSet(`meal:${id}`, photo).catch(() => {});
+      storageUpload(userId, `meal:${id}`, photo);
+      setMealPhotos(p => ({ ...p, [id]: photo }));
+    }
+    setData(d => ({ ...d, savedMeals: [...(d.savedMeals || []), { id, ...item }] }));
   };
 
   const applyWeekPlan = (planByDayId) =>
@@ -253,7 +370,7 @@ export function useAppData() {
           if (!mealName) return;
           const saved = (d.savedMeals || []).find(m => m.n === mealName);
           if (saved) {
-            const { id: _id, photo: _photo, ...item } = saved;
+            const { id: _id, ...item } = saved;
             base[sl.key] = [{ ...item, custom: true }];
           }
         });
@@ -268,17 +385,59 @@ export function useAppData() {
       const base = d.selections[date] ? { ...d.selections[date] } : { ...(DEFAULTS[dm.id] || DEFAULTS.mon) };
       SLOTS.forEach(sl => {
         const existing = toArr(base[sl.key]).map(v => one(v)).filter(v => v && !v.skip);
-        if (existing.length > 0) return; // don't overwrite filled slots
+        if (existing.length > 0) return;
         const mealName = slotPlan[sl.key];
         if (!mealName) return;
         const saved = (d.savedMeals || []).find(m => m.n === mealName);
         if (saved) {
-          const { id: _id, photo: _photo, ...item } = saved;
+          const { id: _id, ...item } = saved;
           base[sl.key] = [{ ...item, custom: true }];
         }
       });
       return { ...d, selections: { ...d.selections, [date]: base } };
     });
+
+  /* ── sign-out cleanup ── */
+  const clearLocalData = () => {
+    localStorage.removeItem(STORE);
+    photoClear().catch(() => {});
+    setData(freshData());
+    setSlotPhotos({});
+    setMealPhotos({});
+    setDay(localDateISO());
+  };
+
+  /* ── backup / restore ── */
+
+  const getFullBackup = async () => {
+    const photoData = await photoGetAll();
+    return { ...data, _photos: photoData };
+  };
+
+  const importData = async (raw) => {
+    try {
+      await photoClear();
+      const toMigrate = raw._photos ? raw._photos : extractOldPhotos(raw);
+      const writes = [];
+      Object.entries(toMigrate.slots || {}).forEach(([date, slotMap]) =>
+        Object.entries(slotMap).forEach(([slot, photo]) => {
+          if (photo) writes.push(photoSet(`slot:${date}:${slot}`, photo));
+        })
+      );
+      Object.entries(toMigrate.meals || {}).forEach(([id, photo]) => {
+        if (photo) writes.push(photoSet(`meal:${id}`, photo));
+      });
+      await Promise.all(writes);
+
+      const all = await photoGetAll();
+      setSlotPhotos(all.slots);
+      setMealPhotos(all.meals);
+      setData(normalizeData(raw));
+
+      // Push restored photos up to Supabase Storage
+      if (userId) storageUploadAll(userId, all);
+    } catch {}
+  };
 
   return {
     data,
@@ -292,8 +451,10 @@ export function useAppData() {
     addItem, replaceItem, removeItem, setSlotItems,
     setSlotPhoto, removeSlotPhoto,
     toggleCheck, resetWeek, logWeight,
-    saveMeal, removeSavedMeal, setSavedMealPhoto, updateSavedMeal, createSavedMeal, applyWeekPlan, applyDayPlan, syncPhotoToMealLib,
+    saveMeal, removeSavedMeal, setSavedMealPhoto: setSavedMealPhotoAlias,
+    updateSavedMeal, createSavedMeal,
+    applyWeekPlan, applyDayPlan, syncPhotoToMealLib,
     weeklyNutrition, weeklyAvg, streak,
-    importData,
+    getFullBackup, importData, clearLocalData,
   };
 }
