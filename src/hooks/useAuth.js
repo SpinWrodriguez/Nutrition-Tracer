@@ -21,7 +21,7 @@ export function useAuth() {
   const signIn = async (email) => {
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: window.location.origin },
+      options: { emailRedirectTo: window.location.origin + import.meta.env.BASE_URL },
     });
     return error;
   };
