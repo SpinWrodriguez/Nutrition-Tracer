@@ -15,7 +15,7 @@ export function LoginScreen({ signIn, verifyOtp }) {
     setLoading(true);
     setError(null);
     const err = await signIn(email.trim());
-    if (err) { setError(err.message); }
+    if (err) { setError(err.message || 'Failed to send code. Please try again.'); }
     else { setStep('code'); }
     setLoading(false);
   };
