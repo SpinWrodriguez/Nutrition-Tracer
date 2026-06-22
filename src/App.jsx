@@ -16,7 +16,7 @@ import { SavedMealsTab } from './components/SavedMealsTab.jsx';
 import { aiWeeklySummary, aiGenerateDayPlan, compressImage } from './api.js';
 
 export default function App() {
-  const { session, loading: authLoading, signIn, verifyOtp, signOut, user } = useAuth();
+  const { session, loading: authLoading, signIn, signUp, signOut, user } = useAuth();
   const app = useAppData(user?.id ?? null);
   const sheet = useItemSheet({
     sel:          app.sel,
@@ -83,7 +83,7 @@ export default function App() {
     </div>
   );
 
-  if (!session && !import.meta.env.DEV) return <LoginScreen signIn={signIn} verifyOtp={verifyOtp} />;
+  if (!session && !import.meta.env.DEV) return <LoginScreen signIn={signIn} signUp={signUp} />;
 
   /* ── week label for header ── */
   const weekLabel = (() => {

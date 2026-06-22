@@ -18,20 +18,17 @@ export function useAuth() {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signIn = async (email) => {
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { shouldCreateUser: true },
-    });
+  const signIn = async (email, password) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     return error;
   };
 
-  const verifyOtp = async (email, token) => {
-    const { error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
+  const signUp = async (email, password) => {
+    const { error } = await supabase.auth.signUp({ email, password });
     return error;
   };
 
   const signOut = () => supabase.auth.signOut();
 
-  return { session, loading, signIn, verifyOtp, signOut, user: session?.user ?? null };
+  return { session, loading, signIn, signUp, signOut, user: session?.user ?? null };
 }
