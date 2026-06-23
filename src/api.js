@@ -81,11 +81,16 @@ Rules:
 - search_query should be specific enough to find the food in a database (include brand if mentioned)
 - Split multi-component meals (e.g. yogurt + granola → 2 components)`;
 
-export async function groundedEstimate(text, imageBase64 = null, mimeType = null) {
-  const userContent = imageBase64
+// imageDataUrls: array of data: URL strings (from FileReader or compressed photo)
+export async function groundedEstimate(text, imageDataUrls = null) {
+  const images = imageDataUrls?.length
+    ? imageDataUrls.map(url => ({ type: 'image_url', image_url: { url } }))
+    : [];
+
+  const userContent = images.length
     ? [
         { type: 'text', text: PARSE_PROMPT + '\nFood: ' + (text || 'the food shown in this photo') },
-        { type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
+        ...images,
       ]
     : PARSE_PROMPT + '\nFood: ' + text;
 
@@ -93,7 +98,7 @@ export async function groundedEstimate(text, imageBase64 = null, mimeType = null
     method: 'POST',
     headers: OPENAI_HEADERS,
     body: JSON.stringify({
-      model: imageBase64 ? 'gpt-4o' : OPENAI_MODEL,
+      model: images.length ? 'gpt-4o' : OPENAI_MODEL,
       messages: [{ role: 'user', content: userContent }],
       response_format: { type: 'json_object' },
     }),
@@ -103,12 +108,10 @@ export async function groundedEstimate(text, imageBase64 = null, mimeType = null
   );
   if (!components?.length) throw new Error('Could not identify food');
 
-  // Search FatSecret for each component in parallel
   const fsResults = await Promise.all(
     components.map(c => searchFatSecret(c.search_query).catch(() => []))
   );
 
-  // Build calculation prompt with real FatSecret data
   const enriched = components.map((c, i) => {
     const hit = fsResults[i]?.[0];
     return hit
@@ -116,6 +119,7 @@ export async function groundedEstimate(text, imageBase64 = null, mimeType = null
       : `• ${c.description} (${c.grams}g): no database match — estimate`;
   }).join('\n');
 
+  const label = meal_name || text || 'the food';
   const calcRes = await fetch(OPENAI_URL, {
     method: 'POST',
     headers: OPENAI_HEADERS,
@@ -123,12 +127,21 @@ export async function groundedEstimate(text, imageBase64 = null, mimeType = null
       model: OPENAI_MODEL,
       messages: [{
         role: 'user',
-        content: `Calculate total macros for: ${meal_name || text}\n\n${enriched}\n\nReturn ONLY valid JSON: {"name":"${(meal_name || text).slice(0, 26)}","k":<total kcal int>,"p":<total protein int>,"c":<total carbs int>,"f":<total fat int>}`,
+        content: `Calculate total macros for: ${label}\n\n${enriched}\n\nReturn ONLY valid JSON: {"reply":"1 sentence summarising what was identified and the key FatSecret sources used","name":"${label.slice(0, 26)}","k":<total kcal int>,"p":<total protein int>,"c":<total carbs int>,"f":<total fat int>}`,
       }],
       response_format: { type: 'json_object' },
     }),
   });
-  return parseOpenAIResponse(await calcRes.json(), meal_name || text);
+  const parsed = JSON.parse((await calcRes.json()).choices?.[0]?.message?.content || '{}');
+  return {
+    custom: true,
+    n: String(parsed.name || label).slice(0, 28),
+    k: Math.max(0, Math.round(+parsed.k || 0)),
+    p: Math.max(0, Math.round(+parsed.p || 0)),
+    c: Math.max(0, Math.round(+parsed.c || 0)),
+    f: Math.max(0, Math.round(+parsed.f || 0)),
+    reply: parsed.reply || null,
+  };
 }
 
 /* ── USDA ── */

@@ -122,7 +122,7 @@ export function useItemSheet({ sel, day, addItem, replaceItem, setSlotPhoto, sav
     reader.onload = async ev => {
       const raw = ev.target.result;
       setImgPreview(raw); setDraft(null); setAiErr(null); setBusy(true); setQty('1');
-      try { setDraft(await groundedEstimate(null, raw.split(',')[1], file.type)); }
+      try { setDraft(await groundedEstimate(null, [raw])); }
       catch { setAiErr("Couldn't estimate — edit numbers manually."); setDraft({ custom:true, n:'Photo meal', k:0, p:0, c:0, f:0 }); }
       setBusy(false);
     };
