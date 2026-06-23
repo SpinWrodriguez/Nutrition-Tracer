@@ -195,7 +195,7 @@ async function handleApi(req, res, url) {
     }
     const data = await fatsecretGet('/foods/search/v1', {
       search_expression: query,
-      max_results: '12',
+      max_results: '20',
       page_number: '0',
       region: REGION,
       language: LANGUAGE,

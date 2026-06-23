@@ -65,9 +65,12 @@ export function AddItemSheet({ sheet, onOpenAnalyze, forceEditMode = false }) {
                         border:'none', borderBottom: i < fatSecretHits.length-1 ? `1px solid ${T.border}` : 'none',
                         background:'transparent', cursor:fetchingDetail ? 'default' : 'pointer',
                         display:'flex', justifyContent:'space-between', alignItems:'center', opacity:fetchingDetail ? 0.5 : 1 }}>
-                      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                        {item.isLiquid && <Droplets size={12} color={T.blue} />}
-                        <span style={{ fontSize:13, color:T.ink }}>{item.name}</span>
+                      <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                          {item.isLiquid && <Droplets size={12} color={T.blue} />}
+                          <span style={{ fontSize:13, color:T.ink }}>{item.foodType === 'Brand' ? item.name.replace(item.brandName + ' ', '') : item.name}</span>
+                        </div>
+                        {item.brandName && <span style={{ fontSize:11, color:T.muted }}>{item.brandName}</span>}
                       </div>
                       <span style={{ ...NF, fontSize:12, color:T.muted, flexShrink:0, marginLeft:10 }}>
                         {item.kcal ? `${item.kcal} kcal` : 'details'}{item.servingLabel ? `/${item.servingLabel}` : ''}

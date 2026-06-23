@@ -71,6 +71,66 @@ export async function fetchFatSecretFoodDetail(foodId) {
   return data;
 }
 
+/* ── Grounded estimation (FatSecret + AI) ── */
+const PARSE_PROMPT = `Parse this meal into food components with weights.
+Return ONLY valid JSON:
+{"meal_name":"short name max 26 chars","components":[{"description":"specific food","grams":number,"search_query":"2-4 word search term"}]}
+Rules:
+- Use exact grams if stated (e.g. "150g yogurt" → grams:150)
+- Estimate realistic portion if not stated
+- search_query should be specific enough to find the food in a database (include brand if mentioned)
+- Split multi-component meals (e.g. yogurt + granola → 2 components)`;
+
+export async function groundedEstimate(text, imageBase64 = null, mimeType = null) {
+  const userContent = imageBase64
+    ? [
+        { type: 'text', text: PARSE_PROMPT + '\nFood: ' + (text || 'the food shown in this photo') },
+        { type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
+      ]
+    : PARSE_PROMPT + '\nFood: ' + text;
+
+  const identifyRes = await fetch(OPENAI_URL, {
+    method: 'POST',
+    headers: OPENAI_HEADERS,
+    body: JSON.stringify({
+      model: imageBase64 ? 'gpt-4o' : OPENAI_MODEL,
+      messages: [{ role: 'user', content: userContent }],
+      response_format: { type: 'json_object' },
+    }),
+  });
+  const { meal_name, components } = JSON.parse(
+    identifyRes.ok ? (await identifyRes.json()).choices?.[0]?.message?.content || '{}' : '{}'
+  );
+  if (!components?.length) throw new Error('Could not identify food');
+
+  // Search FatSecret for each component in parallel
+  const fsResults = await Promise.all(
+    components.map(c => searchFatSecret(c.search_query).catch(() => []))
+  );
+
+  // Build calculation prompt with real FatSecret data
+  const enriched = components.map((c, i) => {
+    const hit = fsResults[i]?.[0];
+    return hit
+      ? `• ${c.description} (${c.grams}g): FatSecret → ${hit.name}: ${hit.kcal} kcal, ${hit.p}g P, ${hit.c}g C, ${hit.f}g F per ${hit.servingLabel}`
+      : `• ${c.description} (${c.grams}g): no database match — estimate`;
+  }).join('\n');
+
+  const calcRes = await fetch(OPENAI_URL, {
+    method: 'POST',
+    headers: OPENAI_HEADERS,
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      messages: [{
+        role: 'user',
+        content: `Calculate total macros for: ${meal_name || text}\n\n${enriched}\n\nReturn ONLY valid JSON: {"name":"${(meal_name || text).slice(0, 26)}","k":<total kcal int>,"p":<total protein int>,"c":<total carbs int>,"f":<total fat int>}`,
+      }],
+      response_format: { type: 'json_object' },
+    }),
+  });
+  return parseOpenAIResponse(await calcRes.json(), meal_name || text);
+}
+
 /* ── USDA ── */
 export async function searchUSDA(q) {
   const url = `https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${USDA_KEY}&query=${encodeURIComponent(q)}&pageSize=7`;

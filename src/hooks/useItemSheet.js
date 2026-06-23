@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { SLOTS, toArr, one } from '../constants.js';
 import {
   searchFatSecret, fetchFatSecretFoodDetail,
-  aiEstimate, aiEstimateFromImage,
+  groundedEstimate,
   generateFoodPhoto, compressImage,
 } from '../api.js';
 
@@ -112,7 +112,7 @@ export function useItemSheet({ sel, day, addItem, replaceItem, setSlotPhoto, sav
   const runAI = async () => {
     if (!query.trim()) return;
     setBusy(true); setAiErr(null); setQty('1');
-    try { setDraft(await aiEstimate(query)); }
+    try { setDraft(await groundedEstimate(query)); }
     catch { setAiErr("Couldn't estimate — edit numbers manually."); setDraft({ custom:true, n:query.slice(0,28)||'Custom', k:0,p:0,c:0,f:0 }); }
     setBusy(false);
   };
@@ -122,7 +122,7 @@ export function useItemSheet({ sel, day, addItem, replaceItem, setSlotPhoto, sav
     reader.onload = async ev => {
       const raw = ev.target.result;
       setImgPreview(raw); setDraft(null); setAiErr(null); setBusy(true); setQty('1');
-      try { setDraft(await aiEstimateFromImage(raw.split(',')[1], file.type)); }
+      try { setDraft(await groundedEstimate(null, raw.split(',')[1], file.type)); }
       catch { setAiErr("Couldn't estimate — edit numbers manually."); setDraft({ custom:true, n:'Photo meal', k:0, p:0, c:0, f:0 }); }
       setBusy(false);
     };
