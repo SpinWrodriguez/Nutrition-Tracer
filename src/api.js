@@ -113,11 +113,13 @@ export async function groundedEstimate(text, imageDataUrls = null) {
   );
 
   const enriched = components.map((c, i) => {
-    const hit = fsResults[i]?.[0];
-    return hit
-      ? `• ${c.description} (${c.grams}g): FatSecret → ${hit.name}: ${hit.kcal} kcal, ${hit.p}g P, ${hit.c}g C, ${hit.f}g F per ${hit.servingLabel}`
-      : `• ${c.description} (${c.grams}g): no database match — estimate`;
-  }).join('\n');
+    const hits = (fsResults[i] || []).slice(0, 4);
+    if (!hits.length) return `• ${c.description} (${c.grams}g): no database match — estimate`;
+    const options = hits.map((h, j) =>
+      `  ${j + 1}. ${h.name}: ${h.kcal} kcal, ${h.p}g P, ${h.c}g C, ${h.f}g F per ${h.servingLabel}`
+    ).join('\n');
+    return `• ${c.description} (${c.grams}g) — pick the closest FatSecret match:\n${options}`;
+  }).join('\n\n');
 
   const label = meal_name || text || 'the food';
   const calcRes = await fetch(OPENAI_URL, {
@@ -127,7 +129,7 @@ export async function groundedEstimate(text, imageDataUrls = null) {
       model: OPENAI_MODEL,
       messages: [{
         role: 'user',
-        content: `Calculate total macros for: ${label}\n\n${enriched}\n\nReturn ONLY valid JSON: {"reply":"1 sentence summarising what was identified and the key FatSecret sources used","name":"${label.slice(0, 26)}","k":<total kcal int>,"p":<total protein int>,"c":<total carbs int>,"f":<total fat int>}`,
+        content: `For each component below, choose the FatSecret option that best matches the description, then scale to the stated grams and sum the totals.\n\n${enriched}\n\nReturn ONLY valid JSON: {"reply":"1 sentence: what was matched from FatSecret for each component","name":"${label.slice(0, 26)}","k":<total kcal int>,"p":<total protein int>,"c":<total carbs int>,"f":<total fat int>}`,
       }],
       response_format: { type: 'json_object' },
     }),
