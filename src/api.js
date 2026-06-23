@@ -1,5 +1,5 @@
-const USDA_KEY   = import.meta.env.VITE_USDA_KEY;
 const OPENAI_KEY = import.meta.env.VITE_OPENAI_KEY;
+const FATSECRET_PROXY_URL = (import.meta.env.VITE_FATSECRET_PROXY_URL || '').replace(/\/$/, '');
 
 const OPENAI_URL     = 'https://api.openai.com/v1/chat/completions';
 const OPENAI_HEADERS = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_KEY}` };
@@ -54,6 +54,21 @@ export async function generateFoodPhoto(foodDesc) {
   const b64 = data.data?.[0]?.b64_json;
   if (!b64) throw new Error(`Unexpected response: ${JSON.stringify(data).slice(0, 200)}`);
   return compressImage(`data:image/png;base64,${b64}`, 480, 0.72);
+}
+
+/* ── FatSecret (proxied server-side) ── */
+export async function searchFatSecret(q) {
+  const res = await fetch(`${FATSECRET_PROXY_URL}/api/fatsecret/search?q=${encodeURIComponent(q)}`);
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error || 'FatSecret search error');
+  return data || [];
+}
+
+export async function fetchFatSecretFoodDetail(foodId) {
+  const res = await fetch(`${FATSECRET_PROXY_URL}/api/fatsecret/food?id=${encodeURIComponent(foodId)}`);
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error || 'FatSecret detail error');
+  return data;
 }
 
 /* ── USDA ── */
