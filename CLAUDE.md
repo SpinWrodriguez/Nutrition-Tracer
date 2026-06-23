@@ -15,6 +15,8 @@ Repo: GitHub Pages deployment via `.github/workflows/deploy.yml`
 - **IndexedDB** — local photo cache (`nt-media` DB, `photos` store)
 - **localStorage** — text data cache (key: `nt-v2`)
 - **GitHub Actions** — builds and deploys on push to `main`
+- **FatSecret API** — food database for nutrition search (replaces USDA/AFCD)
+- **Oracle Cloud VM** — Node.js proxy server to forward FatSecret requests (required because FatSecret uses IP whitelisting and browsers can't call it directly)
 
 ---
 
@@ -64,7 +66,8 @@ Photos (meal slot photos + saved meal photos):
 | `src/components/AiChat.jsx` | AI assistant tab |
 | `src/components/AnalyzeSheet.jsx` | Photo nutrition analysis sheet |
 | `src/components/ui.jsx` | Shared components: `StatCard`, `MacroGauge`, `NavBtn` |
-| `src/api.js` | OpenAI (GPT-4o-mini) for nutrition lookup + photo analysis + AI chat; USDA fallback |
+| `src/api.js` | OpenAI (GPT-4o-mini) for nutrition lookup + photo analysis + AI chat; FatSecret search via proxy |
+| `server/fatsecret-proxy.js` | Node.js HTTP server — proxies FatSecret API calls, handles OAuth token, serves `/api/fatsecret/search` and `/api/fatsecret/food` |
 | `src/db.js` | IndexedDB wrapper — `photoSet`, `photoDel`, `photoClear`, `photoGetAll` |
 | `src/storage.js` | Supabase Storage wrapper — `storageUpload`, `storageDelete`, `storageSync`, `storageUploadAll` |
 | `src/supabase.js` | Supabase client init |
@@ -114,11 +117,20 @@ Each slot holds an array of items. Items can be:
 ## Environment variables
 Set in `.env.local` (gitignored) locally and as GitHub Secrets for CI:
 ```
-VITE_SUPABASE_URL       = https://zjmymkptouwyuntqcage.supabase.co
-VITE_SUPABASE_ANON_KEY  = sb_publishable_...
-VITE_OPENAI_KEY         = sk-...
-VITE_USDA_KEY           = ...
-VITE_GEMINI_KEY         = ...
+VITE_SUPABASE_URL           = https://zjmymkptouwyuntqcage.supabase.co
+VITE_SUPABASE_ANON_KEY      = sb_publishable_...
+VITE_OPENAI_KEY             = sk-...
+VITE_GEMINI_KEY             = ...
+VITE_FATSECRET_PROXY_URL    = https://nutrition-proxy.duckdns.org
+```
+
+The proxy server on Oracle Cloud reads its own `.env` file (not committed):
+```
+FATSECRET_CLIENT_ID     = 6a80b94a249942a58c77846aee22c542
+FATSECRET_CLIENT_SECRET = 45bbad83bb924f2081c26902f71eeec3
+FATSECRET_REGION        = AU
+FATSECRET_LANGUAGE      = en
+PORT                    = 3000
 ```
 
 ---
@@ -132,8 +144,42 @@ VITE_GEMINI_KEY         = ...
 ---
 
 ## Deployment
+
+### Frontend (GitHub Pages)
 Push to `main` → GitHub Actions builds (`npm run build`) → deploys to GitHub Pages.
 Workflow: `.github/workflows/deploy.yml` — injects all `VITE_*` secrets at build time.
+
+### FatSecret Proxy (Oracle Cloud VM)
+- **VM**: Oracle Cloud Always Free — Ubuntu 20.04, `ap-melbourne-1`
+- **IP**: `169.224.231.149`
+- **Domain**: `nutrition-proxy.duckdns.org` (DuckDNS free subdomain)
+- **HTTPS**: nginx reverse proxy + Let's Encrypt certificate (certbot)
+- **Process manager**: PM2 — auto-starts on reboot (`pm2 startup` + `pm2 save`)
+- **Port**: 3000 (internal Node.js), 443 (HTTPS via nginx), 80 (redirects to 443)
+- **Repo on VM**: `/home/ubuntu/Nutrition-Tracer` (cloned from GitHub)
+- **Firewall**: Oracle Security List has ports 22, 80, 443, 3000 open inbound (Destination Port, Source = All)
+- **nginx config**: `/etc/nginx/sites-available/fatsecret` — terminates SSL, proxies to localhost:3000
+- **SSL cert**: Let's Encrypt via certbot, expires 2026-09-21, stored at `/etc/letsencrypt/live/nutrition-proxy.duckdns.org/`
+- **Auto-renew**: run `sudo certbot renew` before expiry (or set up a cron)
+
+To SSH into the VM (from OCI Cloud Shell):
+```bash
+ssh ubuntu@169.224.231.149
+```
+
+To update the proxy after code changes:
+```bash
+cd ~/Nutrition-Tracer && git pull && pm2 restart fatsecret-proxy
+```
+
+To renew SSL certificate (before 2026-09-21):
+```bash
+sudo systemctl stop nginx && sudo certbot renew && sudo systemctl start nginx
+```
+
+### FatSecret IP whitelist
+The VM's IP `169.224.231.149` must be whitelisted in FatSecret:
+**platform.fatsecret.com → Account → API Keys → IP Restrictions**
 
 ---
 
