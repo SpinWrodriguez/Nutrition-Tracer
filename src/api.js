@@ -3,7 +3,7 @@ const FATSECRET_PROXY_URL = (import.meta.env.VITE_FATSECRET_PROXY_URL || '').rep
 
 const OPENAI_URL     = 'https://api.openai.com/v1/chat/completions';
 const OPENAI_HEADERS = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_KEY}` };
-const OPENAI_MODEL   = 'gpt-4o-mini';
+const OPENAI_MODEL   = 'gpt-4o';
 
 const LIQUID_UNITS = ['ml', 'mls', 'milliliter', 'millilitre', 'milliliters', 'millilitres'];
 
@@ -78,8 +78,14 @@ Return ONLY valid JSON:
 Rules:
 - Use exact grams if stated (e.g. "150g yogurt" → grams:150)
 - Estimate realistic portion if not stated
+- search_query is the food name only — do NOT include weights or amounts (e.g. "salmon fillet" not "200g salmon fillet")
 - search_query should be specific enough to find the food in a database (include brand if mentioned)
 - Split multi-component meals (e.g. yogurt + granola → 2 components)`;
+
+function parseServingGrams(label) {
+  const m = String(label || '').match(/^(\d+(?:\.\d+)?)\s*g$/i);
+  return m ? parseFloat(m[1]) : null;
+}
 
 // imageDataUrls: array of data: URL strings (from FileReader or compressed photo)
 export async function groundedEstimate(text, imageDataUrls = null) {
@@ -108,41 +114,75 @@ export async function groundedEstimate(text, imageDataUrls = null) {
   );
   if (!components?.length) throw new Error('Could not identify food');
 
+  // Strip any gram amounts from search queries before hitting FatSecret
   const fsResults = await Promise.all(
-    components.map(c => searchFatSecret(c.search_query).catch(() => []))
+    components.map(c => {
+      const q = c.search_query.replace(/\b\d+\s*g\b/gi, '').replace(/\s+/g, ' ').trim();
+      return searchFatSecret(q).catch(() => []);
+    })
   );
 
-  const enriched = components.map((c, i) => {
+  // Ask AI to pick the best option per component — no math, just a number
+  const pickLines = components.map((c, i) => {
     const hits = (fsResults[i] || []).slice(0, 4);
-    if (!hits.length) return `• ${c.description} (${c.grams}g): no database match — estimate`;
-    const options = hits.map((h, j) =>
-      `  ${j + 1}. ${h.name}: ${h.kcal} kcal, ${h.p}g P, ${h.c}g C, ${h.f}g F per ${h.servingLabel}`
-    ).join('\n');
-    return `• ${c.description} (${c.grams}g) — pick the closest FatSecret match:\n${options}`;
+    if (!hits.length) return `${i + 1}. ${c.description} (${c.grams}g): no matches`;
+    const opts = hits.map((h, j) => `   ${j + 1}. ${h.name} — per ${h.servingLabel}`).join('\n');
+    return `${i + 1}. ${c.description} (${c.grams}g):\n${opts}`;
   }).join('\n\n');
 
-  const label = meal_name || text || 'the food';
-  const calcRes = await fetch(OPENAI_URL, {
+  const pickRes = await fetch(OPENAI_URL, {
     method: 'POST',
     headers: OPENAI_HEADERS,
     body: JSON.stringify({
       model: OPENAI_MODEL,
       messages: [{
         role: 'user',
-        content: `For each component below, choose the FatSecret option that best matches the description, then scale to the stated grams and sum the totals.\n\n${enriched}\n\nReturn ONLY valid JSON: {"reply":"1 sentence: what was matched from FatSecret for each component","name":"${label.slice(0, 26)}","k":<total kcal int>,"p":<total protein int>,"c":<total carbs int>,"f":<total fat int>}`,
+        content: `For each food component, pick the closest FatSecret match by number. Do NOT calculate any macros.\n\n${pickLines}\n\nReturn JSON: {"picks":[<option number 1-4 per component>]}`,
       }],
       response_format: { type: 'json_object' },
     }),
   });
-  const parsed = JSON.parse((await calcRes.json()).choices?.[0]?.message?.content || '{}');
+  const { picks = [] } = JSON.parse((await pickRes.json()).choices?.[0]?.message?.content || '{}');
+
+  // JavaScript does the scaling — not the AI
+  const scaled = await Promise.all(components.map(async (c, i) => {
+    const hits = (fsResults[i] || []).slice(0, 4);
+    if (!hits.length) return null;
+    const rawPick = Number.isInteger(picks[i]) ? picks[i] : 1;
+    const pickIdx = Math.max(0, Math.min(rawPick - 1, hits.length - 1));
+    const hit = hits[pickIdx];
+
+    const servingGrams = parseServingGrams(hit.servingLabel);
+    if (servingGrams > 0) {
+      const scale = c.grams / servingGrams;
+      return { k: hit.kcal * scale, p: hit.p * scale, c: hit.c * scale, f: hit.f * scale, name: hit.name };
+    }
+    // Non-gram serving label — fetch detail which is normalised per 100g
+    try {
+      const detail = await fetchFatSecretFoodDetail(hit.foodId);
+      const scale = c.grams / 100;
+      return { k: detail.kcal * scale, p: detail.p * scale, c: detail.c * scale, f: detail.f * scale, name: detail.name };
+    } catch {
+      return null;
+    }
+  }));
+
+  const totals = scaled.filter(Boolean).reduce(
+    (acc, s) => ({ k: acc.k + s.k, p: acc.p + s.p, c: acc.c + s.c, f: acc.f + s.f }),
+    { k: 0, p: 0, c: 0, f: 0 }
+  );
+
+  const label = meal_name || text || 'the food';
+  const reply = `Matched ${components.map((c, i) => `${scaled[i]?.name || c.description} (${c.grams}g)`).join(' + ')} from FatSecret.`;
+
   return {
     custom: true,
-    n: String(parsed.name || label).slice(0, 28),
-    k: Math.max(0, Math.round(+parsed.k || 0)),
-    p: Math.max(0, Math.round(+parsed.p || 0)),
-    c: Math.max(0, Math.round(+parsed.c || 0)),
-    f: Math.max(0, Math.round(+parsed.f || 0)),
-    reply: parsed.reply || null,
+    n: String(label).slice(0, 28),
+    k: Math.max(0, Math.round(totals.k)),
+    p: Math.max(0, Math.round(totals.p)),
+    c: Math.max(0, Math.round(totals.c)),
+    f: Math.max(0, Math.round(totals.f)),
+    reply,
   };
 }
 
@@ -346,17 +386,26 @@ Reply ONLY with valid JSON — no markdown, no comments. Use this exact shape (i
 
 /* ── AI photo + chat analyzer (gpt-4o for accuracy) ── */
 export async function aiAnalyzeFood(messages) {
-  const system = `You are a precise nutrition expert. When given a food photo or description, reason through these steps before answering:
+  const system = `You are a precise nutrition expert helping a user track their meal macros.
 
-1. IDENTIFY — What is the specific food/dish? Be exact (e.g. "Chicken Tikka Masala" not "curry", "Caffe Latte 12oz" not "coffee").
-2. PORTION — Estimate the weight/volume using reference objects (plate diameter ~26cm, fork ~19cm, hand size, packaging labels). State your estimate in grams or ml.
-3. LOOK UP — Recall the per-100g macros from USDA or a standard nutrition database for this exact food.
-4. CALCULATE — Multiply per-100g values by your portion estimate to get final macros.
-5. ADJUST — If the user provides corrections (label data, portion clarification, extra ingredients), redo steps 3-4 with the new information.
-6. BEST PHOTO — If multiple photos were provided, identify which one shows the food most clearly and completely. Set photo_index to its 0-based position in the order they were sent. If only one photo, use 0. If no photos, use -1.
+When the user asks a CORRECTION or ADDITION (e.g. "add cheese", "actually 50g more salmon", "the label says 320 kcal", "add a drink"):
+- Update the macros to reflect the change.
+- Return a brief reply (1-2 sentences) confirming what changed.
+
+When the user asks an ADVISORY QUESTION (e.g. "how much salmon to skip to reduce 100 calories?", "is this meal high protein?", "what if I swap rice for cauliflower?"):
+- Answer specifically with numbers (e.g. grams, kcal difference).
+- Return the CURRENT macro values UNCHANGED — do not modify k, p, c, f.
+- Reply can be 2-4 sentences.
+
+For the initial estimate or first message:
+1. IDENTIFY — Be exact (e.g. "Chicken Tikka Masala" not "curry").
+2. PORTION — Estimate weight/volume using reference objects (plate ~26cm, fork ~19cm, packaging labels).
+3. LOOK UP — Recall per-100g macros from USDA or standard database.
+4. CALCULATE — Multiply per-100g by portion weight.
+5. BEST PHOTO — Set photo_index to the 0-based position of the clearest photo. Use 0 if only one photo, -1 if none.
 
 ALWAYS respond with valid JSON only — no other text:
-{"reply":"1-2 sentences summarising what you identified and your portion estimate","name":"specific food name max 26 chars","k":<kcal int>,"p":<protein g int>,"c":<carbs g int>,"f":<fat g int>,"photo_index":<int>}`;
+{"reply":"answer or summary","name":"specific food name max 26 chars","k":<kcal int>,"p":<protein g int>,"c":<carbs g int>,"f":<fat g int>,"photo_index":<int>}`;
 
   const res = await fetch(OPENAI_URL, {
     method: 'POST', headers: OPENAI_HEADERS,
