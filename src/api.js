@@ -89,6 +89,32 @@ function parseServingGrams(label) {
   return m ? parseFloat(m[1]) : null;
 }
 
+function isFsRelevant(hits, searchQuery) {
+  if (!hits?.length) return false;
+  const firstWord = searchQuery.trim().split(/\s+/)[0].toLowerCase();
+  return hits.slice(0, 4).some(h => h.name.toLowerCase().includes(firstWord));
+}
+
+async function gptEstimateComponent(description, grams) {
+  const res = await fetch(OPENAI_URL, {
+    method: 'POST',
+    headers: OPENAI_HEADERS,
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      messages: [{
+        role: 'user',
+        content: `Estimate nutrition for exactly ${grams}g of "${description}".
+Return ONLY valid JSON: {"k":number,"p":number,"c":number,"f":number,"name":"short food name"}
+k=kcal, p=protein g, c=carbs g, f=fat g — all values for the full ${grams}g portion.
+If this is a specific restaurant or brand (e.g. Red Rooster, McDonald's, Hungry Jack's), use your knowledge of their menu items.`,
+      }],
+      response_format: { type: 'json_object' },
+    }),
+  });
+  const data = res.ok ? JSON.parse((await res.json()).choices?.[0]?.message?.content || '{}') : {};
+  return { k: data.k || 0, p: data.p || 0, c: data.c || 0, f: data.f || 0, name: data.name || description, fromGpt: true };
+}
+
 // imageDataUrls: array of data: URL strings (from FileReader or compressed photo)
 export async function groundedEstimate(text, imageDataUrls = null) {
   const images = imageDataUrls?.length
@@ -148,8 +174,14 @@ export async function groundedEstimate(text, imageDataUrls = null) {
 
   // JavaScript does the scaling — not the AI
   const scaled = await Promise.all(components.map(async (c, i) => {
+    const q = (c.search_query || '').replace(/\b\d+\s*g\b/gi, '').replace(/\s+/g, ' ').trim();
     const hits = (fsResults[i] || []).slice(0, 4);
-    if (!hits.length) return null;
+
+    // FatSecret free tier lacks brand/restaurant data — fall back to GPT-4o for irrelevant results
+    if (!isFsRelevant(hits, q)) {
+      return gptEstimateComponent(c.description, c.grams).catch(() => null);
+    }
+
     const rawPick = Number.isInteger(picks[i]) ? picks[i] : 1;
     const pickIdx = Math.max(0, Math.min(rawPick - 1, hits.length - 1));
     const hit = hits[pickIdx];
@@ -175,7 +207,10 @@ export async function groundedEstimate(text, imageDataUrls = null) {
   );
 
   const label = meal_name || text || 'the food';
-  const reply = `Matched ${components.map((c, i) => `${scaled[i]?.name || c.description} (${c.grams}g)`).join(' + ')} from FatSecret.`;
+  const reply = `Matched ${components.map((c, i) => {
+    const src = scaled[i]?.fromGpt ? '(AI est.)' : '(FatSecret)';
+    return `${scaled[i]?.name || c.description} (${c.grams}g) ${src}`;
+  }).join(' + ')}.`;
 
   return {
     custom: true,
