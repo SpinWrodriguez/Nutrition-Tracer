@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
 import { Camera, Send, Plus, X, ImagePlus } from 'lucide-react';
 import { T, NF, inp } from '../constants.js';
-import { aiAnalyzeFood, groundedEstimate, compressImage } from '../api.js';
+import { aiAnalyzeFood, classifyFollowUp, groundedEstimate, compressImage } from '../api.js';
 
 export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm }) {
   const [photos,      setPhotos]      = useState([]); // array of data URLs
@@ -9,6 +9,7 @@ export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm }) {
   const [apiMsgs,     setApiMsgs]     = useState([]);
   const [macros,      setMacros]      = useState(null);
   const [bestPhotoIdx, setBestPhotoIdx] = useState(-1);
+  const [mealDesc,    setMealDesc]    = useState('');
   const [input,       setInput]       = useState('');
   const [busy,        setBusy]        = useState(false);
   const [err,         setErr]         = useState(null);
@@ -18,7 +19,7 @@ export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm }) {
   useEffect(() => {
     if (open) {
       setPhotos([]); setDisplayMsgs([]); setApiMsgs([]);
-      setMacros(null); setInput(''); setErr(null); setBusy(false); setBestPhotoIdx(-1);
+      setMacros(null); setInput(''); setErr(null); setBusy(false); setBestPhotoIdx(-1); setMealDesc('');
     }
   }, [open]);
 
@@ -43,7 +44,8 @@ export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm }) {
         setDisplayMsgs(prev => [...prev, { role: 'assistant', text: replyText }]);
         setMacros({ n: result.n || '', k: String(result.k), p: String(result.p), c: String(result.c), f: String(result.f) });
         if (photos.length) setBestPhotoIdx(0);
-        // Seed conversation history so refinements via aiAnalyzeFood have context
+        setMealDesc(text || result.n || '');
+        // Seed conversation history so advisory follow-ups have context
         const userMsg = photos.length
           ? { role: 'user', content: [
               ...photos.map(url => ({ type: 'image_url', image_url: { url } })),
@@ -54,13 +56,35 @@ export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm }) {
           reply: replyText, name: result.n, k: result.k, p: result.p, c: result.c, f: result.f, photo_index: 0,
         })}]);
       } else {
-        // Refinement follow-ups: aiAnalyzeFood (multi-turn conversation)
-        const userMsg = { role: 'user', content: text };
-        const nextApiMsgs = [...apiMsgs, userMsg];
-        const result = await aiAnalyzeFood(nextApiMsgs);
-        setApiMsgs([...nextApiMsgs, { role: 'assistant', content: JSON.stringify(result) }]);
-        setDisplayMsgs(prev => [...prev, { role: 'assistant', text: result.reply || '' }]);
-        setMacros({ n: result.name || '', k: String(result.k ?? 0), p: String(result.p ?? 0), c: String(result.c ?? 0), f: String(result.f ?? 0) });
+        // Follow-up: classify intent to route correctly
+        const { intent, updatedDescription } = await classifyFollowUp(text, mealDesc);
+
+        if ((intent === 'correction' || intent === 'addition') && updatedDescription) {
+          // Re-run grounded estimate with the corrected/extended description
+          const result = await groundedEstimate(updatedDescription, photos.length ? photos : null);
+          const replyText = result.reply || `Updated: ${result.n}: ${result.k} kcal, ${result.p}g P, ${result.c}g C, ${result.f}g F`;
+          setDisplayMsgs(prev => [...prev, { role: 'assistant', text: replyText }]);
+          setMacros({ n: result.n || '', k: String(result.k), p: String(result.p), c: String(result.c), f: String(result.f) });
+          setMealDesc(updatedDescription);
+          // Re-seed conversation with updated grounded values
+          const regroundMsg = photos.length
+            ? { role: 'user', content: [
+                ...photos.map(url => ({ type: 'image_url', image_url: { url } })),
+                { type: 'text', text: displayText },
+              ]}
+            : { role: 'user', content: displayText };
+          setApiMsgs([regroundMsg, { role: 'assistant', content: JSON.stringify({
+            reply: replyText, name: result.n, k: result.k, p: result.p, c: result.c, f: result.f, photo_index: 0,
+          })}]);
+        } else {
+          // Advisory question: aiAnalyzeFood (macros stay unchanged per system prompt)
+          const advisoryMsg = { role: 'user', content: text };
+          const nextApiMsgs = [...apiMsgs, advisoryMsg];
+          const result = await aiAnalyzeFood(nextApiMsgs);
+          setApiMsgs([...nextApiMsgs, { role: 'assistant', content: JSON.stringify(result) }]);
+          setDisplayMsgs(prev => [...prev, { role: 'assistant', text: result.reply || '' }]);
+          setMacros({ n: result.name || '', k: String(result.k ?? 0), p: String(result.p ?? 0), c: String(result.c ?? 0), f: String(result.f ?? 0) });
+        }
       }
     } catch (e) {
       setErr(e.message || 'Something went wrong');

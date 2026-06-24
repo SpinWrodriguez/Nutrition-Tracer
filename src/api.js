@@ -384,6 +384,34 @@ Reply ONLY with valid JSON — no markdown, no comments. Use this exact shape (i
   return JSON.parse(m ? m[0] : raw);
 }
 
+/* ── Follow-up intent classifier ── */
+export async function classifyFollowUp(followUpText, currentMealDesc) {
+  const res = await fetch(OPENAI_URL, {
+    method: 'POST',
+    headers: OPENAI_HEADERS,
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      messages: [{
+        role: 'user',
+        content: `Current meal being tracked: "${currentMealDesc}"
+User's follow-up: "${followUpText}"
+
+Classify the intent:
+- "correction": user identifies a food differently — different brand, restaurant, or product (e.g. "actually it was Red Rooster", "that was sourdough not white bread")
+- "addition": user adds a new item to the meal (e.g. "add a Coke", "I also had some chips")
+- "advisory": user asks a question or wants nutritional advice (e.g. "how much to skip to reduce 100 kcal?", "is this high protein?")
+
+For correction or addition, also return "updatedDescription": the complete revised meal description as a plain string.
+For advisory, set "updatedDescription" to null.
+
+JSON: {"intent":"correction"|"addition"|"advisory","updatedDescription":<string or null>}`,
+      }],
+      response_format: { type: 'json_object' },
+    }),
+  });
+  return JSON.parse((await res.json()).choices?.[0]?.message?.content || '{}');
+}
+
 /* ── AI photo + chat analyzer (gpt-4o for accuracy) ── */
 export async function aiAnalyzeFood(messages) {
   const system = `You are a precise nutrition expert helping a user track their meal macros.
