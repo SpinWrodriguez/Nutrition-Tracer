@@ -71,9 +71,10 @@ export function AddItemSheet({ sheet, onOpenAnalyze, forceEditMode = false }) {
                           <span style={{ fontSize:13, color:T.ink }}>{item.foodType === 'Brand' ? item.name.replace(item.brandName + ' ', '') : item.name}</span>
                         </div>
                         {item.brandName && <span style={{ fontSize:11, color:T.muted }}>{item.brandName}</span>}
+                        {item.servingLabel && <span style={{ fontSize:11, color:T.faint }}>per {item.servingLabel}</span>}
                       </div>
                       <span style={{ ...NF, fontSize:12, color:T.muted, flexShrink:0, marginLeft:10 }}>
-                        {item.kcal ? `${item.kcal} kcal` : 'details'}{item.servingLabel ? `/${item.servingLabel}` : ''}
+                        {item.kcal ? `${item.kcal} kcal` : 'details'}
                       </span>
                     </button>
                   ))}
