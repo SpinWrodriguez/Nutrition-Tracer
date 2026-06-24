@@ -152,7 +152,6 @@ export function useItemSheet({ sel, day, addItem, replaceItem, setSlotPhoto, sav
       f: Math.round(draft.f * q),
     };
     const photo = imgPreview ? await compressImage(imgPreview) : null;
-    if (!onConfirmItem && saveMeal) saveMeal({ n: final.n, k: final.k, p: final.p, c: final.c, f: final.f }, photo);
     confirmItem(open, final, photo);
   };
 
