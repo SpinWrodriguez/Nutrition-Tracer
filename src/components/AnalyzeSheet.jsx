@@ -98,7 +98,7 @@ export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm }) {
 
   if (!open) return null;
 
-  const hasEstimate = macros && macros.k !== '';
+  const hasEstimate = macros !== null;
 
   return (
     <>

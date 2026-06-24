@@ -146,10 +146,10 @@ export function useItemSheet({ sel, day, addItem, replaceItem, setSlotPhoto, sav
     const q = Math.max(0.1, parseFloat(qty) || 1);
     const final = {
       ...draft,
-      k: Math.round(draft.k * q),
-      p: Math.round(draft.p * q),
-      c: Math.round(draft.c * q),
-      f: Math.round(draft.f * q),
+      k: Math.max(0, Math.round((+draft.k || 0) * q)),
+      p: Math.max(0, Math.round((+draft.p || 0) * q)),
+      c: Math.max(0, Math.round((+draft.c || 0) * q)),
+      f: Math.max(0, Math.round((+draft.f || 0) * q)),
     };
     const photo = imgPreview ? await compressImage(imgPreview) : null;
     confirmItem(open, final, photo);
