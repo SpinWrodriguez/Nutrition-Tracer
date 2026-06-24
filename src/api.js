@@ -78,6 +78,7 @@ Return ONLY valid JSON:
 Rules:
 - Use exact grams if stated (e.g. "150g yogurt" → grams:150)
 - Estimate realistic portion if not stated
+- For bone-in meats (chicken, ribs, wings, etc.) use EDIBLE portion weight only — no bones (e.g. half a roast chicken edible ≈ 300-380g, not 500g+)
 - search_query is the food name only — do NOT include weights or amounts (e.g. "salmon fillet" not "200g salmon fillet")
 - search_query should be specific enough to find the food in a database (include brand if mentioned)
 - Split multi-component meals (e.g. yogurt + granola → 2 components)`;
