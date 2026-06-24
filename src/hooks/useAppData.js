@@ -235,15 +235,18 @@ export function useAppData(userId = null) {
       return { ...d, selections: { ...d.selections, [day]: { ...base, [slot]: arr } } };
     });
 
-  const removeItem = (slot, idx) =>
+  const removeItem = (slot, idx) => {
+    const dm  = getDayMeta(day);
+    const def = DEFAULTS[dm.id] || DEFAULTS.mon;
+    const currentArr = toArr((data.selections[day] || def)[slot]);
+    if (currentArr.length === 1) removeSlotPhoto(slot);
     setData(d => {
-      const dm  = getDayMeta(day);
-      const def = DEFAULTS[dm.id] || DEFAULTS.mon;
       const arr = [...toArr((d.selections[day] || def)[slot])];
       arr.splice(idx, 1);
       const base = d.selections[day] ? { ...d.selections[day] } : { ...def };
       return { ...d, selections: { ...d.selections, [day]: { ...base, [slot]: arr } } };
     });
+  };
 
   const setSlotItems = (slot, items) =>
     setData(d => {
