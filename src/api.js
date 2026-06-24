@@ -79,8 +79,8 @@ Rules:
 - Use exact grams if stated (e.g. "150g yogurt" → grams:150)
 - Estimate realistic portion if not stated
 - For bone-in meats (chicken, ribs, wings, etc.) use EDIBLE portion weight only — no bones (e.g. half a roast chicken edible ≈ 300-380g, not 500g+)
-- search_query is the food name only — do NOT include weights or amounts (e.g. "salmon fillet" not "200g salmon fillet")
-- search_query should be specific enough to find the food in a database (include brand if mentioned)
+- search_query is the food name only — do NOT include serving weights or amounts (e.g. "salmon fillet" not "200g salmon fillet")
+- Preserve any proper noun or specific name from the user's input in BOTH description and search_query — never genericize them (e.g. "Red Rooster chicken" → search_query: "Red Rooster chicken", NOT "roasted chicken"; "Chobani yogurt" → search_query: "Chobani yogurt")
 - Split multi-component meals (e.g. yogurt + granola → 2 components)`;
 
 function parseServingGrams(label) {
