@@ -65,37 +65,17 @@ export const DAYS = [
   { id:'sun', label:'Sun', name:'Sunday',    tag:'Golf day — fuel it',       star:false, gk:2100, gp:140 },
 ];
 
-export const DEFAULTS = {
-  mon: { breakfast:['b_arepa'], morningSnack:[], lunch:['l_lean'],   afternoonSnack:[], dinner:['d_fish'],      snack:['s_chobani'] },
-  tue: { breakfast:['b_eggs'],  morningSnack:[], lunch:['l_quinoa'], afternoonSnack:[], dinner:['d_salmon'],    snack:['s_chobani'] },
-  wed: { breakfast:['b_big'],   morningSnack:[], lunch:['l_skip'],   afternoonSnack:[], dinner:['d_schnitzel'], snack:['s_chobani'] },
-  thu: { breakfast:['b_big'],   morningSnack:[], lunch:['l_skip'],   afternoonSnack:[], dinner:['d_grill'],     snack:['s_chobani'] },
-  fri: { breakfast:['b_eggs'],  morningSnack:[], lunch:['l_arepa'],  afternoonSnack:[], dinner:['d_stirfry'],   snack:['s_chobani'] },
-  sat: { breakfast:['b_eggs'],  morningSnack:[], lunch:['l_lean'],   afternoonSnack:[], dinner:['d_burger'],    snack:['s_chobani'] },
-  sun: { breakfast:['b_roll'],  morningSnack:[], lunch:['l_poke'],   afternoonSnack:[], dinner:['d_leangolf'],  snack:['s_chobani'] },
-};
-
 /* ── helpers ── */
 // Use local calendar date (not UTC) so Australian users don't get "yesterday"
 export const localDateISO = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 };
-export const todayId  = () => ['sun','mon','tue','wed','thu','fri','sat'][new Date().getDay()];
 export const toArr    = v => Array.isArray(v) ? v : (v ? [v] : []);
 export const one      = v => typeof v === 'string' ? (OPT[v] ? { ...OPT[v] } : null) : v;
 export const sumSlot  = items => toArr(items).reduce((a, v) => {
   const o = one(v); if (o && !o.skip) { a.k+=o.k; a.p+=o.p; a.c+=o.c; a.f+=o.f; } return a;
 }, { k:0, p:0, c:0, f:0 });
-/* Maps each day-id to the actual calendar date for the current week */
-export function getDayDate(dayId) {
-  const jsDow = { sun:0, mon:1, tue:2, wed:3, thu:4, fri:5, sat:6 };
-  const today  = new Date();
-  const d      = new Date(today);
-  d.setDate(today.getDate() + (jsDow[dayId] - today.getDay()));
-  return d.toISOString().slice(0, 10);
-}
-
 // Returns ISO date string for the Monday of the week containing `date`
 export function getWeekStart(date) {
   const d = new Date(typeof date === 'string' ? date + 'T12:00:00' : date);

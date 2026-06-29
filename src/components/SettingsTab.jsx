@@ -3,46 +3,76 @@ import { Plus, Download, Upload, CheckCircle, AlertCircle, LogOut } from 'lucide
 import { T, NF, inp } from '../constants.js';
 import { StatCard } from './ui.jsx';
 
-export function SettingsTab({ wInput, setWInput, day, logWeight, wStats, goals, updateGoals, theme, toggleTheme, getBackupData, importData, userEmail, onSignOut }) {
+export function SettingsTab({ wInput, setWInput, day, logWeight, wStats, goals, updateGoals, theme, toggleTheme, showGuide, toggleGuide, getQuickBackup, getArchiveBackup, importData, userEmail, onSignOut }) {
   const fileRef = useRef(null);
-  const [importStatus, setImportStatus] = useState(null); // 'ok' | 'err' | 'downloading'
+  const [importStatus, setImportStatus] = useState(null); // 'ok' | 'err' | 'quick' | 'archive'
   const dayLabel = (() => {
     try { return new Date(day + 'T12:00:00').toLocaleDateString('en-AU', { weekday:'long', month:'short', day:'numeric' }); }
     catch { return day; }
   })();
 
-  const handleDownload = async () => {
-    setImportStatus('downloading');
+  const dateStr = new Date().toISOString().slice(0, 10);
+
+  const handleQuickBackup = () => {
     try {
-      const data = await getBackupData();
-      const json = JSON.stringify(data, null, 2);
-      const blob = new Blob([json], { type: 'application/json' });
+      const data = getQuickBackup();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement('a');
-      a.href     = url;
-      a.download = `nutrition-tracer-${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
+      a.href = url; a.download = `nutrition-backup-${dateStr}.json`; a.click();
+      URL.revokeObjectURL(url);
+    } catch {}
+  };
+
+  const handleArchiveBackup = async () => {
+    setImportStatus('archive');
+    try {
+      const blob = await getArchiveBackup();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url; a.download = `nutrition-archive-${dateStr}.zip`; a.click();
       URL.revokeObjectURL(url);
     } catch {}
     setImportStatus(null);
   };
 
-  const handleUpload = (e) => {
+  const handleUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      try {
-        const raw = JSON.parse(ev.target.result);
-        await importData(raw);
-        setImportStatus('ok');
-      } catch {
-        setImportStatus('err');
-      }
-      setTimeout(() => setImportStatus(null), 3000);
-    };
-    reader.readAsText(file);
     e.target.value = '';
+    try {
+      if (file.name.endsWith('.zip')) {
+        const { default: JSZip } = await import('jszip');
+        const zip = await JSZip.loadAsync(file);
+        const dataFile = zip.file('data.json');
+        if (!dataFile) throw new Error('Invalid archive');
+        const raw = JSON.parse(await dataFile.async('string'));
+        const _photos = { slots: {}, meals: {} };
+        for (const [path, entry] of Object.entries(zip.files)) {
+          if (entry.dir || !path.startsWith('photos/')) continue;
+          const filename = path.slice('photos/'.length);
+          const b64 = await entry.async('base64');
+          const dataUrl = `data:image/jpeg;base64,${b64}`;
+          const slotMatch = filename.match(/^slot_(\d{4}-\d{2}-\d{2})_(.+)\.jpg$/);
+          if (slotMatch) {
+            const [, date, slot] = slotMatch;
+            if (!_photos.slots[date]) _photos.slots[date] = {};
+            _photos.slots[date][slot] = dataUrl;
+          } else if (filename.startsWith('meal_')) {
+            const id = filename.replace(/^meal_/, '').replace(/\.jpg$/, '');
+            _photos.meals[id] = dataUrl;
+          }
+        }
+        await importData({ ...raw, _photos });
+      } else {
+        const text = await file.text();
+        await importData(JSON.parse(text));
+      }
+      setImportStatus('ok');
+    } catch {
+      setImportStatus('err');
+    }
+    setTimeout(() => setImportStatus(null), 3000);
   };
 
   return (
@@ -141,29 +171,57 @@ export function SettingsTab({ wInput, setWInput, day, logWeight, wStats, goals, 
         </div>
       </div>
 
+      {/* guide tab toggle */}
+      <div style={{ background:T.surface, borderRadius:20, padding:'16px 18px', marginTop:12, boxShadow:'0 1px 8px rgba(0,0,0,0.06)' }}>
+        <div style={{ ...NF, fontSize:11, letterSpacing:1.5, color:T.gold, fontWeight:700, marginBottom:6 }}>GUIDE TAB</div>
+        <p style={{ fontSize:12, color:T.muted, marginBottom:12, lineHeight:1.5 }}>
+          Show or hide the Fat-Loss Field Guide tab in the navigation bar.
+        </p>
+        <div style={{ display:'flex', gap:8 }}>
+          {[{ key:true, label:'Visible' }, { key:false, label:'Hidden' }].map(({ key, label }) => (
+            <button key={String(key)} onClick={() => showGuide !== key && toggleGuide()}
+              style={{ flex:1, padding:'12px', borderRadius:14, cursor:'pointer',
+                border:`2px solid ${showGuide === key ? T.accent : T.border}`,
+                background: showGuide === key ? T.accentLight : 'transparent',
+                fontSize:13, fontWeight:600,
+                color: showGuide === key ? T.accent : T.muted }}>
+              {label}
+              {showGuide === key && <span style={{ marginLeft:8, fontSize:11 }}>✓</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* data backup */}
       <div style={{ background:T.surface, borderRadius:20, padding:'16px 18px', marginTop:12, boxShadow:'0 1px 8px rgba(0,0,0,0.06)' }}>
         <div style={{ ...NF, fontSize:11, letterSpacing:1.5, color:T.gold, fontWeight:700, marginBottom:6 }}>DATA BACKUP</div>
         <p style={{ fontSize:12, color:T.muted, marginBottom:12, lineHeight:1.5 }}>
-          Download your meals, plans, weights and saved meals as a JSON file. Upload to restore on any device.
+          <b style={{ color:T.ink }}>Quick backup</b> saves text data only — photos stay in Supabase and re-sync on next login.{' '}
+          <b style={{ color:T.ink }}>Archive</b> packages everything into a ZIP for full offline restoration.
         </p>
-        <div style={{ display:'flex', gap:8 }}>
-          <button onClick={handleDownload} disabled={importStatus === 'downloading'}
+        <div style={{ display:'flex', gap:8, marginBottom:8 }}>
+          <button onClick={handleQuickBackup}
             style={{ flex:1, padding:'12px', borderRadius:12, border:`1.5px solid ${T.border}`,
-              background:'transparent', cursor: importStatus === 'downloading' ? 'default' : 'pointer',
+              background:'transparent', cursor:'pointer', display:'flex', alignItems:'center',
+              justifyContent:'center', gap:7, fontSize:13, fontWeight:600, color:T.ink }}>
+            <Download size={15} color={T.accentSoft} /> Quick Backup
+          </button>
+          <button onClick={handleArchiveBackup} disabled={importStatus === 'archive'}
+            style={{ flex:1, padding:'12px', borderRadius:12, border:`1.5px solid ${T.border}`,
+              background:'transparent', cursor: importStatus === 'archive' ? 'default' : 'pointer',
               display:'flex', alignItems:'center', justifyContent:'center', gap:7,
-              fontSize:13, fontWeight:600, color: importStatus === 'downloading' ? T.faint : T.ink }}>
-            <Download size={15} color={importStatus === 'downloading' ? T.faint : T.accentSoft} />
-            {importStatus === 'downloading' ? 'Preparing…' : 'Download'}
+              fontSize:13, fontWeight:600, color: importStatus === 'archive' ? T.faint : T.ink }}>
+            <Download size={15} color={importStatus === 'archive' ? T.faint : T.accentSoft} />
+            {importStatus === 'archive' ? 'Preparing…' : 'Archive ZIP'}
           </button>
-          <button onClick={() => fileRef.current?.click()}
-            style={{ flex:1, padding:'12px', borderRadius:12, border:'none',
-              background:T.accent, cursor:'pointer', display:'flex', alignItems:'center',
-              justifyContent:'center', gap:7, fontSize:13, fontWeight:600, color:'#fff' }}>
-            <Upload size={15} color="#fff" /> Upload
-          </button>
-          <input ref={fileRef} type="file" accept="application/json" style={{ display:'none' }} onChange={handleUpload} />
         </div>
+        <button onClick={() => fileRef.current?.click()}
+          style={{ width:'100%', padding:'12px', borderRadius:12, border:'none',
+            background:T.accent, cursor:'pointer', display:'flex', alignItems:'center',
+            justifyContent:'center', gap:7, fontSize:13, fontWeight:600, color:'#fff' }}>
+          <Upload size={15} color="#fff" /> Restore backup
+        </button>
+        <input ref={fileRef} type="file" accept=".json,.zip" style={{ display:'none' }} onChange={handleUpload} />
         {importStatus === 'ok' && (
           <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:10, fontSize:12, color:T.ok }}>
             <CheckCircle size={14} /> Data restored successfully

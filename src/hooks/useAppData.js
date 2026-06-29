@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { STORE, DAYS, SLOTS, DEFAULTS, OPT, toArr, one, sumSlot, isSkipOnly, getDayMeta, getWeekStart, getWeekDates, localDateISO } from '../constants.js';
+import { STORE, SLOTS, OPT, toArr, one, sumSlot, isSkipOnly, getDayMeta, getWeekStart, getWeekDates, localDateISO } from '../constants.js';
 import { freshData, normalizeData, extractOldPhotos } from '../data.js';
 import { photoSet, photoDel, photoClear, photoGetAll } from '../db.js';
 import { supabase } from '../supabase.js';
@@ -42,9 +42,17 @@ export function useAppData(userId = null) {
       if (error && error.code !== 'PGRST116') {
         console.error('[Supabase] load error:', error);
       } else if (row?.data) {
+        const wasOldFormat = row.data.selections && Object.keys(row.data.selections || {}).some(
+          k => ['mon','tue','wed','thu','fri','sat','sun'].includes(k)
+        );
         const normalized = normalizeData(row.data);
         setData(normalized);
         try { localStorage.setItem(STORE, JSON.stringify(normalized)); } catch {}
+        if (wasOldFormat) {
+          // Immediately persist migrated format so Supabase never re-migrates on next login
+          supabase.from('nutrition_data').upsert({ id: userId, data: normalized })
+            .then(({ error }) => { if (error) console.error('[Supabase] migration save error:', error); });
+        }
       } else {
         // First login — push existing localStorage data to Supabase
         const local = JSON.parse(localStorage.getItem(STORE) || 'null');
@@ -120,8 +128,7 @@ export function useAppData(userId = null) {
   /* ── derived day ── */
   const meta       = getDayMeta(day);
   const goals      = data.goals || { kcal:1800, protein:150, carbs:200, fat:60, focus:'protein' };
-  const defaultSel = DEFAULTS[meta.id] || DEFAULTS.mon;
-  const sel        = data.selections[day] || defaultSel;
+  const sel = data.selections[day] || {};
   const chk        = data.checked[day]    || {};
   const photos     = slotPhotos[day]      || {};
 
@@ -143,7 +150,7 @@ export function useAppData(userId = null) {
     let done = 0, total = 0;
     weekDates.forEach(date => {
       const dm = getDayMeta(date);
-      const s  = data.selections[date] || DEFAULTS[dm.id] || DEFAULTS.mon;
+      const s  = data.selections[date] || {};
       const c  = data.checked[date]    || {};
       SLOTS.forEach(sl => { if (!isSkipOnly(s[sl.key])) { total++; if (c[sl.key]) done++; } });
     });
@@ -167,7 +174,7 @@ export function useAppData(userId = null) {
 
   const weeklyNutrition = useMemo(() => weekDates.map(date => {
     const dm = getDayMeta(date);
-    const s  = data.selections[date] || DEFAULTS[dm.id] || DEFAULTS.mon;
+    const s  = data.selections[date] || {};
     const c  = data.checked[date] || {};
     const eaten = SLOTS.reduce((a, sl) => {
       if (c[sl.key]) { const t = sumSlot(s[sl.key]); a.k+=t.k; a.p+=t.p; a.c+=t.c; a.f+=t.f; }
@@ -194,9 +201,8 @@ export function useAppData(userId = null) {
     const d = new Date(localDateISO() + 'T12:00:00');
     d.setDate(d.getDate() - 1);
     for (let i = 0; i < 365; i++) {
-      const dateStr = d.toISOString().slice(0, 10);
-      const dm = getDayMeta(dateStr);
-      const s  = data.selections[dateStr] || DEFAULTS[dm.id] || DEFAULTS.mon;
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      const s  = data.selections[dateStr] || {};
       const c  = data.checked[dateStr] || {};
       const eaten = SLOTS.reduce((a, sl) => {
         if (c[sl.key]) { const t = sumSlot(s[sl.key]); a.k+=t.k; a.p+=t.p; a.c+=t.c; a.f+=t.f; }
@@ -216,43 +222,35 @@ export function useAppData(userId = null) {
 
   const addItem = (slot, val) =>
     setData(d => {
-      const dm  = getDayMeta(day);
-      const def = DEFAULTS[dm.id] || DEFAULTS.mon;
-      const cur = toArr((d.selections[day] || def)[slot]);
+      const cur = toArr((d.selections[day] || {})[slot]);
       const isNewSkip = typeof val === 'string' && OPT[val]?.skip;
       const next = isNewSkip ? [val] : [...cur.filter(v => !(typeof v === 'string' && OPT[v]?.skip)), val];
-      const base = d.selections[day] ? { ...d.selections[day] } : { ...def };
+      const base = d.selections[day] ? { ...d.selections[day] } : {};
       return { ...d, selections: { ...d.selections, [day]: { ...base, [slot]: next } } };
     });
 
   const replaceItem = (slot, idx, val) =>
     setData(d => {
-      const dm  = getDayMeta(day);
-      const def = DEFAULTS[dm.id] || DEFAULTS.mon;
-      const arr = [...toArr((d.selections[day] || def)[slot])];
+      const arr = [...toArr((d.selections[day] || {})[slot])];
       arr[idx] = val;
-      const base = d.selections[day] ? { ...d.selections[day] } : { ...def };
+      const base = d.selections[day] ? { ...d.selections[day] } : {};
       return { ...d, selections: { ...d.selections, [day]: { ...base, [slot]: arr } } };
     });
 
   const removeItem = (slot, idx) => {
-    const dm  = getDayMeta(day);
-    const def = DEFAULTS[dm.id] || DEFAULTS.mon;
-    const currentArr = toArr((data.selections[day] || def)[slot]);
+    const currentArr = toArr((data.selections[day] || {})[slot]);
     if (currentArr.length === 1) removeSlotPhoto(slot);
     setData(d => {
-      const arr = [...toArr((d.selections[day] || def)[slot])];
+      const arr = [...toArr((d.selections[day] || {})[slot])];
       arr.splice(idx, 1);
-      const base = d.selections[day] ? { ...d.selections[day] } : { ...def };
+      const base = d.selections[day] ? { ...d.selections[day] } : {};
       return { ...d, selections: { ...d.selections, [day]: { ...base, [slot]: arr } } };
     });
   };
 
   const setSlotItems = (slot, items) =>
     setData(d => {
-      const dm  = getDayMeta(day);
-      const def = DEFAULTS[dm.id] || DEFAULTS.mon;
-      const base = d.selections[day] ? { ...d.selections[day] } : { ...def };
+      const base = d.selections[day] ? { ...d.selections[day] } : {};
       return { ...d, selections: { ...d.selections, [day]: { ...base, [slot]: items } } };
     });
 
@@ -367,7 +365,7 @@ export function useAppData(userId = null) {
         const dm      = getDayMeta(date);
         const dayPlan = planByDayId[dm.id];
         if (!dayPlan) return;
-        const base = d.selections[date] ? { ...d.selections[date] } : { ...(DEFAULTS[dm.id] || DEFAULTS.mon) };
+        const base = d.selections[date] ? { ...d.selections[date] } : {};
         SLOTS.forEach(sl => {
           const mealName = dayPlan[sl.key];
           if (!mealName) return;
@@ -385,7 +383,7 @@ export function useAppData(userId = null) {
   const applyDayPlan = (date, slotPlan) =>
     setData(d => {
       const dm   = getDayMeta(date);
-      const base = d.selections[date] ? { ...d.selections[date] } : { ...(DEFAULTS[dm.id] || DEFAULTS.mon) };
+      const base = d.selections[date] ? { ...d.selections[date] } : {};
       SLOTS.forEach(sl => {
         const existing = toArr(base[sl.key]).map(v => one(v)).filter(v => v && !v.skip);
         if (existing.length > 0) return;
@@ -412,13 +410,44 @@ export function useAppData(userId = null) {
 
   /* ── backup / restore ── */
 
-  const getFullBackup = async () => {
+  const getQuickBackup = () => ({ ...data, _version: 2, _photoSource: 'supabase' });
+
+  const getArchiveBackup = async () => {
+    const { default: JSZip } = await import('jszip');
     const photoData = await photoGetAll();
-    return { ...data, _photos: photoData };
+    const zip = new JSZip();
+    zip.file('data.json', JSON.stringify({ ...data, _version: 2 }, null, 2));
+    const folder = zip.folder('photos');
+    Object.entries(photoData.slots || {}).forEach(([date, slotMap]) => {
+      Object.entries(slotMap || {}).forEach(([slot, url]) => {
+        const b64 = url?.split(',')[1];
+        if (b64) folder.file(`slot_${date}_${slot}.jpg`, b64, { base64: true });
+      });
+    });
+    Object.entries(photoData.meals || {}).forEach(([id, url]) => {
+      const b64 = url?.split(',')[1];
+      if (b64) folder.file(`meal_${id}.jpg`, b64, { base64: true });
+    });
+    return zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
   };
 
   const importData = async (raw) => {
     try {
+      if (raw._photoSource === 'supabase') {
+        // Quick backup — text only, pull photos back from Supabase Storage
+        await photoClear();
+        const normalized = normalizeData(raw);
+        setData(normalized);
+        try { localStorage.setItem(STORE, JSON.stringify(normalized)); } catch {}
+        if (userId) {
+          await supabase.from('nutrition_data').upsert({ id: userId, data: normalized });
+          const updated = await storageSync(userId);
+          if (updated) { setSlotPhotos(updated.slots); setMealPhotos(updated.meals); }
+        }
+        return;
+      }
+
+      // Full backup with embedded photos (_photos from archive ZIP or old JSON backup)
       await photoClear();
       const toMigrate = raw._photos ? raw._photos : extractOldPhotos(raw);
       const writes = [];
@@ -436,8 +465,6 @@ export function useAppData(userId = null) {
       setSlotPhotos(all.slots);
       setMealPhotos(all.meals);
       setData(normalizeData(raw));
-
-      // Push restored photos up to Supabase Storage
       if (userId) storageUploadAll(userId, all);
     } catch {}
   };
@@ -458,6 +485,6 @@ export function useAppData(userId = null) {
     updateSavedMeal, createSavedMeal,
     applyWeekPlan, applyDayPlan, syncPhotoToMealLib,
     weeklyNutrition, weeklyAvg, streak,
-    getFullBackup, importData, clearLocalData,
+    getQuickBackup, getArchiveBackup, importData, clearLocalData,
   };
 }

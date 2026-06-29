@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Flame, Dumbbell, TrendingUp, Star, ChevronLeft, ChevronRight, Settings } from 'lucide-react';
+import { Flame, Dumbbell, TrendingUp, Star, ChevronLeft, ChevronRight, Settings, BookOpen } from 'lucide-react';
 import { T, NF, sf, SLOTS, toArr, one, sumSlot, isSkipOnly, getDayMeta, localDateISO } from './constants.js';
 import { useAppData } from './hooks/useAppData.js';
 import { useAuth } from './hooks/useAuth.js';
@@ -13,6 +13,7 @@ import { AnalyzeSheet } from './components/AnalyzeSheet.jsx';
 import { ProgressTab } from './components/ProgressTab.jsx';
 import { SettingsTab } from './components/SettingsTab.jsx';
 import { SavedMealsTab } from './components/SavedMealsTab.jsx';
+import { GuideTab } from './components/GuideTab.jsx';
 import { aiWeeklySummary, aiGenerateDayPlan, compressImage } from './api.js';
 
 export default function App() {
@@ -63,14 +64,17 @@ export default function App() {
 
   const todayISO = localDateISO();
 
-  /* ── theme toggle ── */
+  /* ── theme + guide visibility ── */
   const [theme, setTheme] = useState(() => localStorage.getItem('nt-theme') || 'green');
+  const [showGuide, setShowGuide] = useState(() => localStorage.getItem('nt-show-guide') !== 'false');
+  const toggleGuide = () => setShowGuide(v => { localStorage.setItem('nt-show-guide', String(!v)); return !v; });
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'blue' ? '#4A6880' : '#1C4230');
     localStorage.setItem('nt-theme', theme);
   }, [theme]);
   const toggleTheme = () => setTheme(t => t === 'green' ? 'blue' : 'green');
+  useEffect(() => { if (!showGuide && app.tab === 'guide') app.setTab('plan'); }, [showGuide]);
 
   const handleSignOut = async () => {
     app.clearLocalData();
@@ -307,9 +311,15 @@ export default function App() {
             wStats={app.wStats}
             goals={app.goals} updateGoals={app.updateGoals}
             theme={theme} toggleTheme={toggleTheme}
-            getBackupData={app.getFullBackup} importData={app.importData}
+            showGuide={showGuide} toggleGuide={toggleGuide}
+            getQuickBackup={app.getQuickBackup} getArchiveBackup={app.getArchiveBackup} importData={app.importData}
             userEmail={user?.email} onSignOut={handleSignOut}
           />
+        )}
+
+        {/* ── guide tab ── */}
+        {tab === 'guide' && (
+          <GuideTab wStats={app.wStats} goals={app.goals} />
         )}
 
         {/* ── saved meals tab ── */}
@@ -345,6 +355,7 @@ export default function App() {
         <NavBtn active={tab==='plan'}     onClick={() => setTab('plan')}     icon={<Flame size={20}/>}      label="Plan" />
         <NavBtn active={tab==='progress'} onClick={() => setTab('progress')} icon={<TrendingUp size={20}/>} label="Progress" />
         <NavBtn active={tab==='saved'}    onClick={() => setTab('saved')}    icon={<Star size={20}/>}       label="Saved" />
+        {showGuide && <NavBtn active={tab==='guide'} onClick={() => setTab('guide')} icon={<BookOpen size={20}/>} label="Guide" />}
         <NavBtn active={tab==='settings'} onClick={() => setTab('settings')} icon={<Settings size={20}/>}  label="Settings" />
       </div>
 
