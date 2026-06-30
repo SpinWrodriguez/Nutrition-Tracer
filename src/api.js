@@ -476,8 +476,15 @@ For ADVISORY QUESTIONS (e.g. "how much to skip to save 100 kcal?", "is this high
 - Return the CURRENT macro values UNCHANGED — do not modify k, p, c, f.
 - Reply can be 2-4 sentences.
 
+The "reply" field must show your full working so the user can verify it. Structure it like this:
+- What you identified in each photo ("I can see roast chicken, rice, and broccoli" or "Nutrition label shows 420 kcal per 100g serving")
+- Your portion estimate and how you arrived at it ("The chicken looks like ~200g based on the plate size")
+- The per-item breakdown ("Chicken 200g → 330 kcal, 38g P | Rice 150g → 195 kcal, 4g P, 45g C | Broccoli 80g → 28 kcal, 3g P")
+- The total calculation ("Total: 553 kcal, 45g P, 45g C, 17g F")
+Keep it concise but complete — 3-6 sentences max.
+
 ALWAYS respond with valid JSON only — no other text:
-{"reply":"what you found and how you calculated it","name":"specific food name max 26 chars","k":<kcal int>,"p":<protein g int>,"c":<carbs g int>,"f":<fat g int>,"photo_index":<int>}`;
+{"reply":"full working as described above","name":"specific food name max 26 chars","k":<kcal int>,"p":<protein g int>,"c":<carbs g int>,"f":<fat g int>,"photo_index":<int>}`;
 
   const res = await fetch(OPENAI_URL, {
     method: 'POST', headers: OPENAI_HEADERS,
