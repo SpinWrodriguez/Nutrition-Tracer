@@ -453,24 +453,31 @@ JSON: {"intent":"correction"|"addition"|"advisory","updatedDescription":<string 
 export async function aiAnalyzeFood(messages) {
   const system = `You are a precise nutrition expert helping a user track their meal macros.
 
-When the user asks a CORRECTION or ADDITION (e.g. "add cheese", "actually 50g more salmon", "the label says 320 kcal", "add a drink"):
-- Update the macros to reflect the change.
-- Return a brief reply (1-2 sentences) confirming what changed.
+PRIORITY ORDER — use whichever source is available, in this order:
+1. NUTRITION LABELS IN PHOTOS — If any photo shows a nutrition panel, ingredients table, or any printed nutritional info, read those numbers exactly. This is ground truth. Do not override label values with database estimates.
+2. USER-STATED VALUES — If the user says "the label says X kcal" or provides specific numbers, use exactly those.
+3. DATABASE RECALL — Only if no label and no user values are available, recall from USDA or standard nutritional databases.
 
-When the user asks an ADVISORY QUESTION (e.g. "how much salmon to skip to reduce 100 calories?", "is this meal high protein?", "what if I swap rice for cauliflower?"):
-- Answer specifically with numbers (e.g. grams, kcal difference).
+For the INITIAL estimate (first message):
+- SCAN every photo provided. Some may be the meal; others may be nutrition labels or packaging.
+- READ any nutrition panel carefully: note the per-serving values (kcal, protein, carbs, fat) and the serving size (g or ml).
+- ESTIMATE portion from the meal photo: how many servings did the user eat? Use visual cues — plate size (~26 cm), utensils, packaging remaining, or any stated grams.
+- CALCULATE: label values × portions eaten. If multiple items each have labels, sum them.
+- If NO label is visible: identify the food precisely (brand/restaurant if known), estimate portion weight, then recall macros from USDA or known menu data.
+- BEST PHOTO: set photo_index to the index of the clearest food photo (prefer the meal photo over label photos). Use 0 if only one photo.
+- In your reply, briefly state what source you used (e.g. "Read from nutrition label", "Estimated from photo — no label visible").
+
+For CORRECTIONS or ADDITIONS (e.g. "add cheese", "actually it was Red Rooster", "label says 320 kcal", "I had 2 servings not 1"):
+- Update macros to reflect the change.
+- Return a brief reply (1-2 sentences) confirming what changed and the new total.
+
+For ADVISORY QUESTIONS (e.g. "how much to skip to save 100 kcal?", "is this high protein?"):
+- Answer specifically with numbers.
 - Return the CURRENT macro values UNCHANGED — do not modify k, p, c, f.
 - Reply can be 2-4 sentences.
 
-For the initial estimate or first message:
-1. IDENTIFY — Be exact (e.g. "Chicken Tikka Masala" not "curry").
-2. PORTION — Estimate weight/volume using reference objects (plate ~26cm, fork ~19cm, packaging labels).
-3. LOOK UP — Recall per-100g macros from USDA or standard database.
-4. CALCULATE — Multiply per-100g by portion weight.
-5. BEST PHOTO — Set photo_index to the 0-based position of the clearest photo. Use 0 if only one photo, -1 if none.
-
 ALWAYS respond with valid JSON only — no other text:
-{"reply":"answer or summary","name":"specific food name max 26 chars","k":<kcal int>,"p":<protein g int>,"c":<carbs g int>,"f":<fat g int>,"photo_index":<int>}`;
+{"reply":"what you found and how you calculated it","name":"specific food name max 26 chars","k":<kcal int>,"p":<protein g int>,"c":<carbs g int>,"f":<fat g int>,"photo_index":<int>}`;
 
   const res = await fetch(OPENAI_URL, {
     method: 'POST', headers: OPENAI_HEADERS,
