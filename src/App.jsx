@@ -70,7 +70,7 @@ export default function App() {
   const toggleGuide = () => setShowGuide(v => { localStorage.setItem('nt-show-guide', String(!v)); return !v; });
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'blue' ? '#4A6880' : '#1C4230');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'blue' ? '#14776E' : '#1C4230');
     localStorage.setItem('nt-theme', theme);
   }, [theme]);
   const toggleTheme = () => setTheme(t => t === 'green' ? 'blue' : 'green');
@@ -159,10 +159,10 @@ export default function App() {
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', paddingBottom:8 }}>
             <div>
               <div style={{ ...NF, fontSize:18, fontWeight:700, color:'#fff', lineHeight:1 }}>{meta.name}</div>
-              <div style={{ fontSize:11, color:'rgba(255,255,255,0.55)', marginTop:2 }}>{meta.tag}</div>
+              <div style={{ fontSize:11, color:'rgba(255,255,255,0.8)', marginTop:2 }}>{meta.tag}</div>
             </div>
             <div style={{ textAlign:'right' }}>
-              <div style={{ ...NF, fontSize:10, color:'rgba(255,255,255,0.5)', letterSpacing:1 }}>THIS WEEK</div>
+              <div style={{ ...NF, fontSize:10, color:'rgba(255,255,255,0.8)', letterSpacing:1 }}>THIS WEEK</div>
               <div style={{ ...NF, fontSize:22, fontWeight:700, color:'#fff', lineHeight:1 }}>{adh.pct}%</div>
             </div>
           </div>
@@ -174,7 +174,7 @@ export default function App() {
                 color:'#fff', cursor:'pointer', display:'flex', alignItems:'center' }}>
               <ChevronLeft size={15} />
             </button>
-            <span style={{ fontSize:12, color:'rgba(255,255,255,0.85)', fontWeight:500 }}>{weekLabel}</span>
+            <span style={{ fontSize:12, color:'rgba(255,255,255,0.92)', fontWeight:500 }}>{weekLabel}</span>
             <button onClick={app.nextWeek}
               style={{ background:'rgba(255,255,255,0.15)', border:'none', borderRadius:8, padding:'4px 8px',
                 color:'#fff', cursor:'pointer', display:'flex', alignItems:'center' }}>
@@ -195,11 +195,11 @@ export default function App() {
                 <button key={date} onClick={() => { setDay(date); closeSheet(); }}
                   style={{ flexShrink:0, minWidth:44, padding:'6px 4px', borderRadius:10, border:'none',
                     cursor:'pointer', background:active ? '#fff' : 'rgba(255,255,255,0.12)',
-                    color:active ? T.accent : 'rgba(255,255,255,0.75)', position:'relative', transition:'background 0.15s' }}>
+                    color:active ? T.accent : 'rgba(255,255,255,0.88)', position:'relative', transition:'background 0.15s' }}>
                   {dm.star && <div style={{ position:'absolute', top:3, right:4, width:4, height:4, borderRadius:'50%', background:T.gold }} />}
                   <div style={{ ...NF, fontSize:13, fontWeight:700 }}>{dm.label}</div>
-                  <div style={{ fontSize:10, fontWeight:500, marginTop:1, opacity:0.85 }}>{dayNum}</div>
-                  {isToday && <div style={{ fontSize:8, letterSpacing:0.5, marginTop:1, fontWeight:600, opacity:0.8 }}>TODAY</div>}
+                  <div style={{ fontSize:10, fontWeight:500, marginTop:1, opacity:0.95 }}>{dayNum}</div>
+                  {isToday && <div style={{ fontSize:8, letterSpacing:0.5, marginTop:1, fontWeight:600, opacity:0.95 }}>TODAY</div>}
                 </button>
               );
             })}

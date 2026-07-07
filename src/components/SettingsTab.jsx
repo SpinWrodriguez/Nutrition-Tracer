@@ -155,7 +155,7 @@ export function SettingsTab({ wInput, setWInput, day, logWeight, wStats, goals, 
         <div style={{ display:'flex', gap:8 }}>
           {[
             { key:'green', label:'Forest', accent:'#1C4230', bg:'#F6F6F2' },
-            { key:'blue',  label:'Slate',  accent:'#4A6880', bg:'#EDF0F4' },
+            { key:'blue',  label:'Teal',   accent:'#14776E', bg:'#E3FBFA' },
           ].map(t => (
             <button key={t.key} onClick={() => theme !== t.key && toggleTheme()}
               style={{ flex:1, padding:'12px', borderRadius:14, cursor:'pointer',

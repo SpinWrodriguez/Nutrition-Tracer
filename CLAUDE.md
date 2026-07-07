@@ -77,7 +77,7 @@ Photos (meal slot photos + saved meal photos):
 ## Design system
 All colors via CSS custom properties, themed per `data-theme` on `<html>`:
 - `green` (default) — dark green accent
-- `blue` — muted gray-blue accent (`#4A6880`)
+- `blue` — teal accent (`#14776E`); internal key stays `blue` for backwards compatibility with existing `nt-theme` localStorage values, UI label is "Teal"
 
 Tokens accessed via `T.bg`, `T.surface`, `T.accent`, `T.gold`, `T.ok`, `T.over`, etc.
 Fonts: `NF` = Oswald (narrow numbers), `sf` = system sans-serif.

@@ -82,6 +82,8 @@ export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm }) {
       c: Math.max(0, Math.round(+macros.c || 0)),
       f: Math.max(0, Math.round(+macros.f || 0)),
     };
+    const lastReply = [...displayMsgs].reverse().find(m => m.role === 'assistant');
+    if (lastReply) item.analysis = lastReply.text;
     const bestPhoto = bestPhotoIdx >= 0 && photos[bestPhotoIdx] ? photos[bestPhotoIdx] : null;
     onConfirm(item, bestPhoto);
   };

@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { X, Wand2, ImagePlus, Pencil, Plus } from 'lucide-react';
 import { T, NF, sf, SLOTS } from '../constants.js';
 import { generateFoodPhoto, compressImage } from '../api.js';
+import { AnalysisModal } from './ui.jsx';
 
 const SHORT_LABEL = {
   breakfast:      'Breakfast',
@@ -16,6 +17,7 @@ export function SavedMealsTab({ savedMeals, removeSavedMeal, setSavedMealPhoto, 
   const [generatingId, setGeneratingId] = useState(null);
   const [genErr,       setGenErr]       = useState(null);
   const [added,        setAdded]        = useState({});
+  const [viewAnalysis, setViewAnalysis] = useState(null);
   const fileRefs = useRef({});
 
   const handleGeneratePhoto = async (meal) => {
@@ -39,7 +41,9 @@ export function SavedMealsTab({ savedMeals, removeSavedMeal, setSavedMealPhoto, 
   };
 
   const handleAddToSlot = (meal, slotKey) => {
-    addItem(slotKey, { custom: true, n: meal.n, k: meal.k, p: meal.p, c: meal.c, f: meal.f });
+    const item = { custom: true, n: meal.n, k: meal.k, p: meal.p, c: meal.c, f: meal.f };
+    if (meal.analysis) item.analysis = meal.analysis;
+    addItem(slotKey, item);
     if (meal.photo && setSlotPhoto) setSlotPhoto(slotKey, meal.photo);
     setAdded(prev => {
       const cur = new Set(prev[meal.id] || []);
@@ -156,8 +160,10 @@ export function SavedMealsTab({ savedMeals, removeSavedMeal, setSavedMealPhoto, 
             <div style={{ padding: '12px 14px 10px', display: 'flex', alignItems: 'flex-start',
               justifyContent: 'space-between', gap: 8 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: T.ink, marginBottom: 4,
-                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{meal.n}</div>
+                <div onClick={() => meal.analysis && setViewAnalysis(meal)}
+                  style={{ fontSize: 15, fontWeight: 700, color: T.ink, marginBottom: 4,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    cursor: meal.analysis ? 'pointer' : 'default' }}>{meal.n}</div>
                 <div style={{ ...NF, fontSize: 12, color: T.muted }}>{meal.k} kcal · {meal.p}P · {meal.c}C · {meal.f}F</div>
               </div>
               <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
@@ -200,6 +206,10 @@ export function SavedMealsTab({ savedMeals, removeSavedMeal, setSavedMealPhoto, 
           </div>
         );
       })}
+
+      {viewAnalysis && (
+        <AnalysisModal name={viewAnalysis.n} text={viewAnalysis.analysis} onClose={() => setViewAnalysis(null)} />
+      )}
     </div>
   );
 }

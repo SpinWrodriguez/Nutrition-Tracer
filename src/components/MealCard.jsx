@@ -1,6 +1,7 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { Check, Plus, X, Pencil, Wand2, Copy, ClipboardPaste, Star, ImagePlus } from 'lucide-react';
 import { T, NF, one } from '../constants.js';
+import { AnalysisModal } from './ui.jsx';
 
 export function MealCard({
   slot, items, totals, isChecked, skipOnly,
@@ -9,6 +10,7 @@ export function MealCard({
   onCheck, onAdd, onEdit, onRemoveItem, onRemovePhoto, onGeneratePhoto, onPickPhoto, onClearError, onCopy, onPaste, onCancelCopy, onSaveItem, onUnsaveItem,
 }) {
   const fileRef = useRef(null);
+  const [viewAnalysis, setViewAnalysis] = useState(null);
   const handleFilePick = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -40,8 +42,9 @@ export function MealCard({
   }
 
   return (
+    <>
     <div style={{ background:T.surface, borderRadius:18, marginBottom:10,
-      boxShadow:'0 1px 6px rgba(0,0,0,0.05)', borderLeft:`4px solid ${isChecked ? T.ok : T.border}` }}>
+      boxShadow:'0 1px 6px rgba(0,0,0,0.05)', borderLeft:`4px solid ${isChecked ? T.accent : T.border}` }}>
 
       {/* photo header */}
       <input ref={fileRef} type="file" accept="image/*" onChange={handleFilePick} style={{ display:'none' }} />
@@ -124,7 +127,11 @@ export function MealCard({
                             display:'flex', alignItems:'center', justifyContent:'center', borderRadius:8 }}>
                           <X size={14} color={T.faint} />
                         </button>
-                        <span style={{ flex:1, fontSize:14, fontWeight:600, color:T.ink, minWidth:0 }}>{o.n}</span>
+                        <span onClick={() => o.analysis && setViewAnalysis(o)}
+                          style={{ flex:1, fontSize:14, fontWeight:600, color:T.ink, minWidth:0,
+                            cursor: o.analysis ? 'pointer' : 'default' }}>
+                          {o.n}
+                        </span>
                         {o.custom && <span style={{ fontSize:10, color:T.accentSoft, fontWeight:600, marginRight:2 }}>CUSTOM</span>}
                         <button onClick={() => onEdit(idx)}
                           style={{ width:32, height:32, background:'none', border:'none', cursor:'pointer', flexShrink:0,
@@ -164,8 +171,8 @@ export function MealCard({
           <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:6, flexShrink:0 }}>
             <button onClick={onCheck}
               style={{ width:44, height:44, borderRadius:13,
-                border:`2px solid ${isChecked ? T.ok : T.border}`,
-                background:isChecked ? T.ok : 'transparent',
+                border:`2px solid ${isChecked ? T.accent : T.border}`,
+                background:isChecked ? T.accent : 'transparent',
                 cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
               {isChecked && <Check size={20} color="#fff" strokeWidth={2.5} />}
             </button>
@@ -220,5 +227,10 @@ export function MealCard({
         )}
       </div>
     </div>
+
+    {viewAnalysis && (
+      <AnalysisModal name={viewAnalysis.n} text={viewAnalysis.analysis} onClose={() => setViewAnalysis(null)} />
+    )}
+    </>
   );
 }
