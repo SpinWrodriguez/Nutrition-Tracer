@@ -1,9 +1,9 @@
 import { SLOTS, toArr } from './constants.js';
 
-const DEFAULT_GOALS = { kcal: 1800, protein: 150, carbs: 200, fat: 60, focus: 'protein' };
+const DEFAULT_GOALS = { kcal: 1800, protein: 150, carbs: 200, fat: 60, focus: 'protein', maintenance: 2200 };
 
 export function freshData() {
-  return { selections: {}, checked: {}, weights: [], savedMeals: [], goals: { ...DEFAULT_GOALS } };
+  return { selections: {}, checked: {}, weights: [], savedMeals: [], exercise: {}, goals: { ...DEFAULT_GOALS } };
 }
 
 export function normalizeData(raw) {
@@ -17,6 +17,7 @@ export function normalizeData(raw) {
   });
 
   d.weights    = raw.weights || [];
+  d.exercise   = raw.exercise || {};
   // Strip photo field — photos live in IndexedDB now
   d.savedMeals = (raw.savedMeals || []).map(({ photo: _p, ...m }) => m);
   d.goals      = raw.goals ? { ...DEFAULT_GOALS, ...raw.goals } : { ...DEFAULT_GOALS };

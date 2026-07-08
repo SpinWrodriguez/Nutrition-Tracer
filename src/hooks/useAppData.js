@@ -146,6 +146,20 @@ export function useAppData(userId = null) {
   const planned = useMemo(() =>
     SLOTS.reduce((a, s) => { a.k += sumSlot(sel[s.key]).k; return a; }, { k:0 }), [sel]);
 
+  /* ── exercise (deficit display) ── */
+  const exercise  = toArr((data.exercise || {})[day]);
+  const exerciseK = exercise.reduce((s, e) => s + (+e.k || 0), 0);
+
+  const addExercise = (n, k) =>
+    setData(d => ({ ...d, exercise: { ...(d.exercise || {}), [day]: [...toArr((d.exercise || {})[day]), { n, k }] } }));
+
+  const removeExercise = (idx) =>
+    setData(d => {
+      const arr = [...toArr((d.exercise || {})[day])];
+      arr.splice(idx, 1);
+      return { ...d, exercise: { ...(d.exercise || {}), [day]: arr } };
+    });
+
   const adh = useMemo(() => {
     let done = 0, total = 0;
     weekDates.forEach(date => {
@@ -195,6 +209,19 @@ export function useAppData(userId = null) {
       days: n,
     };
   }, [weeklyNutrition]);
+
+  const weeklyDeficit = useMemo(() => {
+    const maint = goals.maintenance || 2200;
+    const days = weeklyNutrition
+      .filter(dd => dd.eaten.k > 0)
+      .map(dd => {
+        const ex = toArr((data.exercise || {})[dd.date]).reduce((s, e) => s + (+e.k || 0), 0);
+        return maint + ex - dd.eaten.k;
+      });
+    if (!days.length) return null;
+    const total = Math.round(days.reduce((s, v) => s + v, 0));
+    return { total, days: days.length, kg: total / 7700 };
+  }, [weeklyNutrition, data.exercise, goals]);
 
   const streak = useMemo(() => {
     let count = 0;
@@ -474,6 +501,7 @@ export function useAppData(userId = null) {
     day, setDay, tab, setTab,
     meta, sel, chk, photos, savedMeals,
     eaten, planned, adh,
+    exercise, exerciseK, addExercise, removeExercise, weeklyDeficit,
     weights, wStats, weekData,
     wInput, setWInput,
     goals, updateGoals,

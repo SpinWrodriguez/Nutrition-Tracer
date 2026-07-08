@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Plus, X } from 'lucide-react';
 import { T, NF } from '../constants.js';
 
 function SectionHead({ num, title, sub }) {
@@ -13,14 +14,30 @@ function SectionHead({ num, title, sub }) {
   );
 }
 
-export function GuideTab({ wStats, goals }) {
+export function GuideTab({ wStats, goals, updateGoals, dayName, isToday,
+  eaten, exercise, exerciseK, addExercise, removeExercise, weeklyDeficit }) {
   const [deficit, setDeficit] = useState(300);
   const [curWt,   setCurWt]   = useState('');
   const [goalWt,  setGoalWt]  = useState('80');
+  const [exName,  setExName]  = useState('');
+  const [exKcal,  setExKcal]  = useState('');
 
   useEffect(() => {
     if (wStats?.current) setCurWt(String(wStats.current.toFixed(1)));
   }, [wStats?.current]);
+
+  const maint    = goals.maintenance || 2200;
+  const net      = eaten.k - exerciseK;
+  const dayDef   = maint - net;
+  const surplus  = dayDef < 0;
+
+  const submitExercise = () => {
+    const k = Math.round(parseFloat(exKcal));
+    const n = exName.trim();
+    if (!n || !Number.isFinite(k) || k <= 0) return;
+    addExercise(n.slice(0, 28), k);
+    setExName(''); setExKcal('');
+  };
 
   const KCAL_PER_KG = 7700;
   const perWk  = (deficit * 7) / KCAL_PER_KG;
@@ -48,6 +65,88 @@ export function GuideTab({ wStats, goals }) {
         </div>
         <div style={{ fontSize:14, color:T.muted, lineHeight:1.55, maxWidth:'46ch' }}>
           A reminder card for the days the scale messes with your head. Your week-over-week average is the real you. Everything below explains why the daily bounces aren't.
+        </div>
+      </div>
+
+      {/* ── 00 live deficit ── */}
+      <div style={{ marginBottom:22 }}>
+        <SectionHead num="00" title={isToday ? "Today's deficit — live" : `${dayName} — deficit`}
+          sub="Checked meals minus logged exercise, against maintenance." />
+        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:16, padding:'18px 16px' }}>
+
+          {/* headline number */}
+          <div style={{ display:'flex', alignItems:'flex-end', gap:6, marginBottom:14 }}>
+            <span style={{ ...NF, fontSize:54, lineHeight:0.9, color: surplus ? T.over : T.accent, fontWeight:700 }}>
+              {Math.abs(dayDef).toLocaleString()}
+            </span>
+            <span style={{ fontSize:13, color:T.muted, paddingBottom:7 }}>
+              kcal {surplus ? 'surplus' : 'deficit'} so far
+            </span>
+          </div>
+
+          {/* eaten / exercise / net */}
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:1, background:T.border, borderRadius:12, overflow:'hidden' }}>
+            {[
+              { label:'Eaten',    value:eaten.k.toLocaleString(),    unit:'kcal' },
+              { label:'Exercise', value:exerciseK ? `−${exerciseK.toLocaleString()}` : '0', unit:'kcal' },
+              { label:'Net',      value:net.toLocaleString(),        unit:'kcal' },
+            ].map(({ label, value, unit }) => (
+              <div key={label} style={{ background:T.surface, padding:'13px 8px', textAlign:'center' }}>
+                <div style={{ fontSize:10, color:T.muted, letterSpacing:0.5, textTransform:'uppercase', marginBottom:4 }}>{label}</div>
+                <div style={{ ...NF, fontSize:22, fontWeight:700, color:T.ink, lineHeight:1 }}>
+                  {value} <span style={{ fontSize:11, color:T.muted, fontWeight:400 }}>{unit}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* maintenance */}
+          <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:14, fontSize:13, color:T.muted }}>
+            <span>Blended maintenance</span>
+            <input type="number" inputMode="numeric" value={maint}
+              onChange={e => updateGoals({ maintenance: Math.max(0, Math.round(+e.target.value || 0)) })}
+              style={inputStyle} />
+            <span>kcal</span>
+          </div>
+
+          {/* exercise log */}
+          <div style={{ marginTop:16, paddingTop:14, borderTop:`1px dashed ${T.border}` }}>
+            <div style={{ ...NF, fontSize:10, color:T.accent, letterSpacing:1, marginBottom:8 }}>EXERCISE LOG</div>
+            {exercise.map((e, i) => (
+              <div key={i} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
+                <button onClick={() => removeExercise(i)}
+                  style={{ background:'none', border:'none', cursor:'pointer', padding:2, flexShrink:0,
+                    display:'flex', alignItems:'center', justifyContent:'center' }}>
+                  <X size={14} color={T.faint} />
+                </button>
+                <span style={{ flex:1, fontSize:14, fontWeight:600, color:T.ink, minWidth:0 }}>{e.n}</span>
+                <span style={{ ...NF, fontSize:14, fontWeight:700, color:T.accent }}>−{(+e.k || 0).toLocaleString()} kcal</span>
+              </div>
+            ))}
+            <div style={{ display:'flex', gap:6, marginTop: exercise.length ? 10 : 0 }}>
+              <input value={exName} onChange={e => setExName(e.target.value)} placeholder="Golf, gym session…"
+                onKeyDown={e => { if (e.key === 'Enter') submitExercise(); }}
+                style={{ flex:1, minWidth:0, fontSize:14, color:T.ink, background:T.bg,
+                  border:`1.5px solid ${T.border}`, borderRadius:10, padding:'8px 10px', outline:'none' }} />
+              <input value={exKcal} onChange={e => { if (/^\d*$/.test(e.target.value)) setExKcal(e.target.value); }}
+                placeholder="kcal" type="text" inputMode="numeric"
+                onKeyDown={e => { if (e.key === 'Enter') submitExercise(); }}
+                style={{ width:64, textAlign:'center', fontSize:14, fontWeight:700, color:T.accent, background:T.bg,
+                  border:`1.5px solid ${T.border}`, borderRadius:10, padding:'8px 4px', outline:'none' }} />
+              <button onClick={submitExercise}
+                style={{ background:T.accent, border:'none', borderRadius:10, width:38, cursor:'pointer',
+                  display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                <Plus size={17} color="#fff" />
+              </button>
+            </div>
+          </div>
+
+          {/* weekly rollup */}
+          {weeklyDeficit && (
+            <div style={{ fontSize:12, color:T.muted, marginTop:14, lineHeight:1.55 }}>
+              This week: ~<b style={{ color: weeklyDeficit.total < 0 ? T.over : T.accent }}>{Math.abs(weeklyDeficit.total).toLocaleString()} kcal {weeklyDeficit.total < 0 ? 'surplus' : 'deficit'}</b> across {weeklyDeficit.days} logged day{weeklyDeficit.days === 1 ? '' : 's'} ≈ <b style={{ color:T.ink }}>{Math.abs(weeklyDeficit.kg).toFixed(2)} kg</b> of fat. Your eating target and protein goal don't move — exercise deepens the deficit, it doesn't buy food back.
+            </div>
+          )}
         </div>
       </div>
 

@@ -319,7 +319,19 @@ export default function App() {
 
         {/* ── guide tab ── */}
         {tab === 'guide' && (
-          <GuideTab wStats={app.wStats} goals={app.goals} />
+          <GuideTab
+            wStats={app.wStats}
+            goals={app.goals}
+            updateGoals={app.updateGoals}
+            dayName={meta.name}
+            isToday={day === todayISO}
+            eaten={eaten}
+            exercise={app.exercise}
+            exerciseK={app.exerciseK}
+            addExercise={app.addExercise}
+            removeExercise={app.removeExercise}
+            weeklyDeficit={app.weeklyDeficit}
+          />
         )}
 
         {/* ── saved meals tab ── */}

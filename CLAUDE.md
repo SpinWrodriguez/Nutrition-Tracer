@@ -23,7 +23,7 @@ Repo: GitHub Pages deployment via `.github/workflows/deploy.yml`
 ## Architecture
 
 ### Data storage (two-layer)
-Text data (meals, checks, weights, goals, savedMeals):
+Text data (meals, checks, weights, goals, savedMeals, exercise):
 - Written to `localStorage` key `nt-v2` on every change
 - Debounced 2s upsert to Supabase `nutrition_data` table (JSONB column `data`, keyed by `userId`)
 
@@ -64,6 +64,7 @@ Photos (meal slot photos + saved meal photos):
 | `src/components/ProgressTab.jsx` | Weekly progress charts |
 | `src/components/SavedMealsTab.jsx` | Saved meals library (star favourites) |
 | `src/components/AiChat.jsx` | AI assistant tab |
+| `src/components/GuideTab.jsx` | Fat-loss field guide + live deficit display (exercise log, net kcal vs maintenance) |
 | `src/components/AnalyzeSheet.jsx` | Photo nutrition analysis sheet |
 | `src/components/ui.jsx` | Shared components: `StatCard`, `MacroGauge`, `NavBtn` |
 | `src/api.js` | OpenAI (GPT-4o-mini) for nutrition lookup + photo analysis + AI chat; FatSecret search via proxy |
@@ -104,6 +105,7 @@ Each slot holds an array of items. Items can be:
 - `replaceItem(slotKey, idx, item)` — replaces item (edit)
 - `toggleCheck(slotKey)` — marks slot eaten/uneaten
 - `logWeight(kg)` — adds weight entry for current day
+- `addExercise(name, kcal)` / `removeExercise(idx)` — exercise log for current day (`data.exercise[date]` = `[{ n, k }]`). Powers the deficit display in GuideTab: deficit = `goals.maintenance` (default 2200) + exercise − eaten. **Deficit-display model** — exercise never raises the eating target or macros, it only deepens the shown deficit. `weeklyDeficit` memo rolls it up across logged days of the week.
 - `saveMeal(item, photo?)` — saves to savedMeals library
 - `removeSavedMeal(id)` — removes from library
 - `setSlotPhoto(slotKey, base64)` — sets photo for current day slot
