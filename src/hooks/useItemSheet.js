@@ -72,7 +72,7 @@ export function useItemSheet({ sel, day, addItem, replaceItem, setSlotPhoto, sav
       setGrams(String(o._servingG || 100));
       setIsLiquid(o._isLiquid || false);
     } else {
-      setDraft({ custom:true, n:o.n, k:o.k, p:o.p, c:o.c, f:o.f });
+      setDraft({ custom:true, n:o.n, k:o.k, p:o.p, c:o.c, f:o.f, ...(o.analysis ? { analysis: o.analysis } : {}) });
     }
   };
 
@@ -159,7 +159,7 @@ export function useItemSheet({ sel, day, addItem, replaceItem, setSlotPhoto, sav
 
   const confirmSavedMeal = meal => confirmItem(
     open,
-    { custom:true, n:meal.n, k:meal.k, p:meal.p, c:meal.c, f:meal.f },
+    { custom:true, n:meal.n, k:meal.k, p:meal.p, c:meal.c, f:meal.f, ...(meal.analysis ? { analysis: meal.analysis } : {}) },
     meal.photo || null,
   );
 

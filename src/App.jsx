@@ -273,7 +273,7 @@ export default function App() {
                   onCopy={() => copySlot(s.key)}
                   onPaste={() => pasteToSlot(s.key)}
                   onCancelCopy={() => setClipboard(null)}
-                  onSaveItem={item => app.saveMeal({ n:item.n, k:item.k, p:item.p, c:item.c, f:item.f }, photo)}
+                  onSaveItem={item => app.saveMeal({ n:item.n, k:item.k, p:item.p, c:item.c, f:item.f, ...(item.analysis ? { analysis: item.analysis } : {}) }, photo)}
                   onUnsaveItem={item => {
                     const saved = app.savedMeals.find(m => m.n.toLowerCase() === item.n.toLowerCase());
                     if (saved) app.removeSavedMeal(saved.id);
