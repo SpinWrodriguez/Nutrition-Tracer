@@ -64,7 +64,7 @@ Photos (meal slot photos + saved meal photos):
 | `src/components/ProgressTab.jsx` | Weekly progress charts |
 | `src/components/SavedMealsTab.jsx` | Saved meals library (star favourites) |
 | `src/components/AiChat.jsx` | AI assistant tab |
-| `src/components/GuideTab.jsx` | Fat-loss field guide + live deficit display (exercise log, net kcal vs maintenance) |
+| `src/components/GuideTab.jsx` | "Coach" tab — live deficit display (exercise log, net kcal vs maintenance) + collapsible fat-loss field guide. Internal tab key stays `guide` (nav label is "Coach") for backwards compat with `nt-show-guide` localStorage |
 | `src/components/AnalyzeSheet.jsx` | Photo nutrition analysis sheet |
 | `src/components/ui.jsx` | Shared components: `StatCard`, `MacroGauge`, `NavBtn` |
 | `src/api.js` | OpenAI (GPT-4o-mini) for nutrition lookup + photo analysis + AI chat; FatSecret search via proxy |
@@ -96,6 +96,8 @@ Each slot holds an array of items. Items can be:
 
 `one(v)` resolves either form to `{ n, k, p, c, f }`.
 `sumSlot(items)` returns totals `{ k, p, c, f }`.
+
+AI-analyzed items (and saved meals) also carry `analysis` (last AI reply text) and `aiChat` (`[{ role, text }]` full conversation). Tapping an item/meal name that has `analysis` reopens AnalyzeSheet in continue mode (seeded with `aiChat` history + the slot/meal photo) so the conversation can resume; confirming updates the item in place. **Gotcha:** any code that rebuilds an item from its fields (edit sheet drafts, save-to-library, add-from-library) must copy `analysis` and `aiChat` through, or the history is silently lost.
 
 ---
 

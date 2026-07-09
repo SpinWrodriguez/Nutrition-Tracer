@@ -1,16 +1,14 @@
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 import { Check, Plus, X, Pencil, Wand2, Copy, ClipboardPaste, Star, ImagePlus } from 'lucide-react';
 import { T, NF, one } from '../constants.js';
-import { AnalysisModal } from './ui.jsx';
 
 export function MealCard({
   slot, items, totals, isChecked, skipOnly,
   photo, hasFood, isGenerating, photoErr,
   clipboard, focus, savedMealNames,
-  onCheck, onAdd, onEdit, onRemoveItem, onRemovePhoto, onGeneratePhoto, onPickPhoto, onClearError, onCopy, onPaste, onCancelCopy, onSaveItem, onUnsaveItem,
+  onCheck, onAdd, onEdit, onRemoveItem, onRemovePhoto, onGeneratePhoto, onPickPhoto, onClearError, onCopy, onPaste, onCancelCopy, onSaveItem, onUnsaveItem, onViewAnalysis,
 }) {
   const fileRef = useRef(null);
-  const [viewAnalysis, setViewAnalysis] = useState(null);
   const handleFilePick = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -127,7 +125,7 @@ export function MealCard({
                             display:'flex', alignItems:'center', justifyContent:'center', borderRadius:8 }}>
                           <X size={14} color={T.faint} />
                         </button>
-                        <span onClick={() => o.analysis && setViewAnalysis(o)}
+                        <span onClick={() => o.analysis && onViewAnalysis && onViewAnalysis(o, idx)}
                           style={{ flex:1, fontSize:14, fontWeight:600, color:T.ink, minWidth:0,
                             cursor: o.analysis ? 'pointer' : 'default' }}>
                           {o.n}
@@ -227,10 +225,6 @@ export function MealCard({
         )}
       </div>
     </div>
-
-    {viewAnalysis && (
-      <AnalysisModal name={viewAnalysis.n} text={viewAnalysis.analysis} onClose={() => setViewAnalysis(null)} />
-    )}
     </>
   );
 }

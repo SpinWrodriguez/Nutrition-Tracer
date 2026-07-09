@@ -3,12 +3,13 @@ import { Camera, Send, Plus, X, ImagePlus } from 'lucide-react';
 import { T, NF, inp } from '../constants.js';
 import { aiAnalyzeFood, compressImage } from '../api.js';
 
-export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm }) {
+export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm, initial = null, confirmLabel = null }) {
   const [photos,      setPhotos]      = useState([]); // array of data URLs
   const [displayMsgs, setDisplayMsgs] = useState([]);
   const [apiMsgs,     setApiMsgs]     = useState([]);
   const [macros,      setMacros]      = useState(null);
   const [bestPhotoIdx, setBestPhotoIdx] = useState(-1);
+  const [photosSent,  setPhotosSent]  = useState(false);
   const [input,       setInput]       = useState('');
   const [busy,        setBusy]        = useState(false);
   const [err,         setErr]         = useState(null);
@@ -17,8 +18,18 @@ export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm }) {
 
   useEffect(() => {
     if (open) {
-      setPhotos([]); setDisplayMsgs([]); setApiMsgs([]);
-      setMacros(null); setInput(''); setErr(null); setBusy(false); setBestPhotoIdx(-1);
+      // Seed from a prior analysis (continue-conversation mode) or start fresh
+      const history = initial?.history || [];
+      setPhotos(initial?.photos || []);
+      setDisplayMsgs(history);
+      setApiMsgs(history.map(m => ({ role: m.role, content: m.text })));
+      setMacros(initial?.macros ? {
+        n: initial.macros.n || '',
+        k: String(initial.macros.k ?? 0), p: String(initial.macros.p ?? 0),
+        c: String(initial.macros.c ?? 0), f: String(initial.macros.f ?? 0),
+      } : null);
+      setInput(''); setErr(null); setBusy(false); setBestPhotoIdx(-1);
+      setPhotosSent(false); // seeded photos are re-sent on the next message so the AI can see them
     }
   }, [open]);
 
@@ -36,8 +47,9 @@ export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm }) {
     setInput('');
 
     try {
-      // Photos are included on the first message only — conversation history provides context after that
-      const userMsg = isFirst && photos.length
+      // Photos ride on the first message that hasn't sent them yet — history provides context after that
+      const attachPhotos = photos.length > 0 && !photosSent;
+      const userMsg = attachPhotos
         ? { role: 'user', content: [
             ...photos.map(url => ({ type: 'image_url', image_url: { url } })),
             { type: 'text', text: displayText },
@@ -50,7 +62,8 @@ export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm }) {
 
       setDisplayMsgs(prev => [...prev, { role: 'assistant', text: replyText }]);
       setMacros({ n: result.name || '', k: String(result.k ?? 0), p: String(result.p ?? 0), c: String(result.c ?? 0), f: String(result.f ?? 0) });
-      if (isFirst && result.photo_index >= 0) setBestPhotoIdx(result.photo_index);
+      if (attachPhotos && result.photo_index >= 0) setBestPhotoIdx(result.photo_index);
+      if (attachPhotos) setPhotosSent(true);
       setApiMsgs([...nextApiMsgs, { role: 'assistant', content: JSON.stringify(result) }]);
     } catch (e) {
       setErr(e.message || 'Something went wrong');
@@ -84,6 +97,7 @@ export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm }) {
     };
     const lastReply = [...displayMsgs].reverse().find(m => m.role === 'assistant');
     if (lastReply) item.analysis = lastReply.text;
+    if (displayMsgs.length) item.aiChat = displayMsgs; // full conversation, so it can be resumed later
     const bestPhoto = bestPhotoIdx >= 0 && photos[bestPhotoIdx] ? photos[bestPhotoIdx] : null;
     onConfirm(item, bestPhoto);
   };
@@ -228,7 +242,7 @@ export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm }) {
               style={{ width:'100%', padding:'13px', borderRadius:12, border:'none',
                 background:T.ok, color:'#fff', fontSize:14, fontWeight:600, cursor:'pointer',
                 display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
-              <Plus size={16} /> Add to {slotMeta?.label?.toLowerCase()}
+              <Plus size={16} /> {confirmLabel || `Add to ${slotMeta?.label?.toLowerCase()}`}
             </button>
           )}
         </div>

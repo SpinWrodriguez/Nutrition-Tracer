@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Flame, Dumbbell, TrendingUp, Star, ChevronLeft, ChevronRight, Settings, BookOpen } from 'lucide-react';
+import { Flame, Dumbbell, TrendingUp, Star, ChevronLeft, ChevronRight, Settings, Compass } from 'lucide-react';
 import { T, NF, sf, SLOTS, toArr, one, sumSlot, isSkipOnly, getDayMeta, localDateISO } from './constants.js';
 import { useAppData } from './hooks/useAppData.js';
 import { useAuth } from './hooks/useAuth.js';
@@ -57,6 +57,8 @@ export default function App() {
   const [clipboard,     setClipboard]    = useState(null);
   const [analyzeSlot,   setAnalyzeSlot]  = useState(null);
   const [analyzeSaved,  setAnalyzeSaved] = useState(false);
+  // continue a prior AI analysis: { type:'slot', slotKey, idx, item } | { type:'saved', meal }
+  const [analysisCtx,   setAnalysisCtx]  = useState(null);
 
   const { day, setDay, tab, setTab, meta, sel, chk, photos, eaten, planned, adh } = app;
   const savedMealNames = useMemo(() => new Set(app.savedMeals.map(m => m.n.toLowerCase())), [app.savedMeals]);
@@ -273,7 +275,10 @@ export default function App() {
                   onCopy={() => copySlot(s.key)}
                   onPaste={() => pasteToSlot(s.key)}
                   onCancelCopy={() => setClipboard(null)}
-                  onSaveItem={item => app.saveMeal({ n:item.n, k:item.k, p:item.p, c:item.c, f:item.f, ...(item.analysis ? { analysis: item.analysis } : {}) }, photo)}
+                  onSaveItem={item => app.saveMeal({ n:item.n, k:item.k, p:item.p, c:item.c, f:item.f,
+                    ...(item.analysis ? { analysis: item.analysis } : {}),
+                    ...(item.aiChat ? { aiChat: item.aiChat } : {}) }, photo)}
+                  onViewAnalysis={(item, idx) => setAnalysisCtx({ type:'slot', slotKey: s.key, idx, item })}
                   onUnsaveItem={item => {
                     const saved = app.savedMeals.find(m => m.n.toLowerCase() === item.n.toLowerCase());
                     if (saved) app.removeSavedMeal(saved.id);
@@ -344,6 +349,7 @@ export default function App() {
             setSlotPhoto={app.setSlotPhoto}
             onOpenAddSheet={() => savedMealsSheet.openSheet('saved')}
             onEditSavedMeal={openEditSavedMeal}
+            onViewAnalysis={meal => setAnalysisCtx({ type:'saved', meal })}
           />
         )}
       </div>
@@ -367,7 +373,7 @@ export default function App() {
         <NavBtn active={tab==='plan'}     onClick={() => setTab('plan')}     icon={<Flame size={20}/>}      label="Plan" />
         <NavBtn active={tab==='progress'} onClick={() => setTab('progress')} icon={<TrendingUp size={20}/>} label="Progress" />
         <NavBtn active={tab==='saved'}    onClick={() => setTab('saved')}    icon={<Star size={20}/>}       label="Saved" />
-        {showGuide && <NavBtn active={tab==='guide'} onClick={() => setTab('guide')} icon={<BookOpen size={20}/>} label="Guide" />}
+        {showGuide && <NavBtn active={tab==='guide'} onClick={() => setTab('guide')} icon={<Compass size={20}/>} label="Coach" />}
         <NavBtn active={tab==='settings'} onClick={() => setTab('settings')} icon={<Settings size={20}/>}  label="Settings" />
       </div>
 
@@ -408,6 +414,38 @@ export default function App() {
         onClose={() => setAnalyzeSaved(false)}
         onConfirm={(item, photo) => { app.createSavedMeal(item, photo); setAnalyzeSaved(false); }}
       />
+
+      {/* ── continue a prior AI analysis (tap item / meal name) ── */}
+      {analysisCtx && (() => {
+        const src   = analysisCtx.type === 'slot' ? analysisCtx.item : analysisCtx.meal;
+        const photo = analysisCtx.type === 'slot' ? (photos[analysisCtx.slotKey] || null) : (analysisCtx.meal.photo || null);
+        return (
+          <AnalyzeSheet
+            open
+            slotMeta={analysisCtx.type === 'slot'
+              ? SLOTS.find(s => s.key === analysisCtx.slotKey)
+              : { label: src.n }}
+            initial={{
+              history: src.aiChat || [{ role: 'assistant', text: src.analysis }],
+              photos:  photo ? [photo] : [],
+              macros:  src,
+            }}
+            confirmLabel={analysisCtx.type === 'slot' ? 'Update item' : 'Update saved meal'}
+            onClose={() => setAnalysisCtx(null)}
+            onConfirm={(item, newPhoto) => {
+              if (analysisCtx.type === 'slot') {
+                app.replaceItem(analysisCtx.slotKey, analysisCtx.idx, item);
+                if (newPhoto) app.setSlotPhoto(analysisCtx.slotKey, newPhoto);
+              } else {
+                const { custom: _c, ...updates } = item;
+                app.updateSavedMeal(analysisCtx.meal.id, updates);
+                if (newPhoto) app.setSavedMealPhoto(analysisCtx.meal.id, newPhoto);
+              }
+              setAnalysisCtx(null);
+            }}
+          />
+        );
+      })()}
     </div>
   );
 }

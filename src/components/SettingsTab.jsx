@@ -171,11 +171,11 @@ export function SettingsTab({ wInput, setWInput, day, logWeight, wStats, goals, 
         </div>
       </div>
 
-      {/* guide tab toggle */}
+      {/* coach tab toggle */}
       <div style={{ background:T.surface, borderRadius:20, padding:'16px 18px', marginTop:12, boxShadow:'0 1px 8px rgba(0,0,0,0.06)' }}>
-        <div style={{ ...NF, fontSize:11, letterSpacing:1.5, color:T.gold, fontWeight:700, marginBottom:6 }}>GUIDE TAB</div>
+        <div style={{ ...NF, fontSize:11, letterSpacing:1.5, color:T.gold, fontWeight:700, marginBottom:6 }}>COACH TAB</div>
         <p style={{ fontSize:12, color:T.muted, marginBottom:12, lineHeight:1.5 }}>
-          Show or hide the Fat-Loss Field Guide tab in the navigation bar.
+          Show or hide the Coach tab (live deficit + fat-loss field guide) in the navigation bar.
         </p>
         <div style={{ display:'flex', gap:8 }}>
           {[{ key:true, label:'Visible' }, { key:false, label:'Hidden' }].map(({ key, label }) => (
