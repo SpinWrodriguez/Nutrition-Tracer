@@ -352,6 +352,9 @@ export async function aiDayChat(messages, ctx) {
     return `${s.label}${s.checked ? ' ✓' : ''}: ${sum}`;
   }).join('\n');
 
+  const ingLines = (ctx.ingredients || [])
+    .map(i => `- ${i.n} — per ${i.per || 'serving'}: ${i.k} kcal, ${i.p}g P, ${i.c}g C, ${i.f}g F`).join('\n');
+
   const system = `You are a friendly nutrition assistant in a meal-tracking app. Answer anything related to food, nutrition, ingredients, cooking, diets, calories, macros, health, or the user's logged meals. Be conversational and helpful.
 
 Only deflect with a short witty joke if the message is clearly nothing to do with food or nutrition (e.g. asking about sports scores, coding, or the weather). When in doubt, answer — it's better to be helpful than overly restrictive.
@@ -362,7 +365,7 @@ Day: ${ctx.dayName}
 Goals: ${ctx.goals.kcal} kcal, ${ctx.goals.protein}g protein, ${ctx.goals.carbs}g carbs, ${ctx.goals.fat}g fat. Focus: ${ctx.goals.focus}.
 Meals:\n${slotLines}
 Eaten so far: ${ctx.eaten.k} kcal · ${ctx.eaten.p}g P · ${ctx.eaten.c}g C · ${ctx.eaten.f}g F
-
+${ingLines ? `\nUser's saved ingredient facts (personal ground truth — when these foods come up, use these values scaled to the amount discussed):\n${ingLines}\n` : ''}
 Confirm you have context.`;
 
   const oaMessages = [
@@ -450,13 +453,14 @@ JSON: {"intent":"correction"|"addition"|"advisory","updatedDescription":<string 
 }
 
 /* ── AI photo + chat analyzer (gpt-4o for accuracy) ── */
-export async function aiAnalyzeFood(messages) {
+export async function aiAnalyzeFood(messages, learned = []) {
   const system = `You are a precise nutrition expert helping a user track their meal macros.
 
 PRIORITY ORDER — use whichever source is available, in this order:
 1. NUTRITION LABELS IN PHOTOS — If any photo shows a nutrition panel, ingredients table, or any printed nutritional info, read those numbers exactly. This is ground truth. Do not override label values with your own estimates.
 2. USER-STATED VALUES — If the user says "the label says X kcal" or provides specific numbers, use exactly those.
-3. BEST ESTIMATE — Only if no label and no user values are available, use your best knowledge of typical nutrition values for that specific food, brand, or restaurant item.
+3. SAVED INGREDIENT LIBRARY — The user's personal ground-truth values learned from their past meals (listed at the end of this prompt, if any). If a component of THIS meal matches a library entry, use the library values, scaled to the portion actually eaten. A fresh label or user-stated value (1–2) overrides the library.
+4. BEST ESTIMATE — Only if none of the above are available, use your best knowledge of typical nutrition values for that specific food, brand, or restaurant item.
 
 For the INITIAL estimate (first message):
 - SCAN every photo provided. Some may be the meal; others may be nutrition labels or packaging.
@@ -476,6 +480,12 @@ For ADVISORY QUESTIONS (e.g. "how much to skip to save 100 kcal?", "is this high
 - Return the CURRENT macro values UNCHANGED — do not modify k, p, c, f.
 - Reply can be 2-4 sentences.
 
+INGREDIENT BREAKDOWN — every reply must also include "ingredients": the distinct food components of THIS meal only, with the values you actually used:
+- One entry per component, max 10. List ONLY foods that are part of this meal — NEVER copy library entries that are not in the meal.
+- "per" is the amount as a short human string (e.g. "60 g", "1 slice (25 g)", "250 ml"); k/p/c/f are for exactly that amount. If the user stated values on a specific basis (e.g. "220 kcal per 60 g"), use that basis for "per", not the total eaten.
+- "src" is where the numbers came from: "label" = read from a photo label, "user" = the user stated the values, "library" = taken from the saved ingredient library, "estimate" = your own estimate.
+- On corrections/additions, return the updated full list reflecting the change. On advisory questions, return the list unchanged.
+
 The "reply" field must show your full working so the user can verify it. Structure it like this:
 - What you identified in each photo ("I can see roast chicken, rice, and broccoli" or "Nutrition label shows 420 kcal per 100g serving")
 - Your portion estimate and how you arrived at it ("The chicken looks like ~200g based on the plate size")
@@ -484,13 +494,18 @@ The "reply" field must show your full working so the user can verify it. Structu
 Keep it concise but complete — 3-6 sentences max.
 
 ALWAYS respond with valid JSON only — no other text:
-{"reply":"full working as described above","name":"specific food name max 26 chars","k":<kcal int>,"p":<protein g int>,"c":<carbs g int>,"f":<fat g int>,"photo_index":<int>}`;
+{"reply":"full working as described above","name":"specific food name max 26 chars","k":<kcal int>,"p":<protein g int>,"c":<carbs g int>,"f":<fat g int>,"photo_index":<int>,"ingredients":[{"n":"component name","per":"amount string","k":<int>,"p":<int>,"c":<int>,"f":<int>,"src":"label"|"user"|"library"|"estimate"}]}`;
+
+  const libBlock = learned.length
+    ? '\n\nSAVED INGREDIENT LIBRARY (personal ground truth — see priority 3):\n' +
+      learned.map(i => `- ${i.n} — per ${i.per || 'serving'}: ${i.k} kcal, ${i.p}g P, ${i.c}g C, ${i.f}g F`).join('\n')
+    : '';
 
   const res = await fetch(OPENAI_URL, {
     method: 'POST', headers: OPENAI_HEADERS,
     body: JSON.stringify({
       model: 'gpt-4o',
-      messages: [{ role: 'system', content: system }, ...messages],
+      messages: [{ role: 'system', content: system + libBlock }, ...messages],
       temperature: 0.3,
       response_format: { type: 'json_object' },
     }),

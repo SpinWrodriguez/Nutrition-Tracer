@@ -99,6 +99,12 @@ Each slot holds an array of items. Items can be:
 
 AI-analyzed items (and saved meals) also carry `analysis` (last AI reply text) and `aiChat` (`[{ role, text }]` full conversation). Tapping an item/meal name that has `analysis` reopens AnalyzeSheet in continue mode (seeded with `aiChat` history + the slot/meal photo) so the conversation can resume; confirming updates the item in place. **Gotcha:** any code that rebuilds an item from its fields (edit sheet drafts, save-to-library, add-from-library) must copy `analysis` and `aiChat` through, or the history is silently lost.
 
+## Ingredient library
+Ingredients are `savedMeals` entries with `kind: 'ingredient'` and `per` (free-form basis string, e.g. `"60 g"`, `"1 slice (22 g)"`); macros are for exactly that amount. They render in their own section of the Saved tab (same card/features as meals) and are added to slots as one serving named `"Arepa (60 g)"`.
+- **Auto-learning**: every `aiAnalyzeFood` reply includes an `ingredients` array (components of the meal, each with `src`: `label`/`user`/`library`/`estimate`). On confirm, AnalyzeSheet passes it up and `learnIngredients()` (useAppData) upserts by lowercase name — **but only `label`/`user`/`library` sources**; the model's own `estimate`s are never persisted (would freeze guesses as ground truth). Cap 150.
+- **AI injection**: `aiAnalyzeFood(messages, learned)` gets the library as priority tier 3 in its system prompt; `aiDayChat` gets it via `ctx.ingredients`. `groundedEstimate` deliberately does NOT.
+- **Kind-scoped filters (gotcha)**: name lookups over savedMeals must exclude ingredients where meal semantics are meant — star toggle (`savedMealNames` in App.jsx, `saveMeal` in useAppData), `applyWeekPlan`/`applyDayPlan`, `syncPhotoToMealLib`, and the savedMeals list passed to `aiGenerateDayPlan`.
+
 ---
 
 ## Key mutations in useAppData

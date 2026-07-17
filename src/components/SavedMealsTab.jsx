@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
-import { X, Wand2, ImagePlus, Pencil, Plus } from 'lucide-react';
-import { T, NF, sf, SLOTS } from '../constants.js';
+import { X, Wand2, ImagePlus, Pencil, Plus, Search } from 'lucide-react';
+import { T, NF, sf, inp, SLOTS } from '../constants.js';
 import { generateFoodPhoto, compressImage } from '../api.js';
 
 const SHORT_LABEL = {
@@ -16,7 +16,15 @@ export function SavedMealsTab({ savedMeals, removeSavedMeal, setSavedMealPhoto, 
   const [generatingId, setGeneratingId] = useState(null);
   const [genErr,       setGenErr]       = useState(null);
   const [added,        setAdded]        = useState({});
+  const [filter,       setFilter]       = useState('');
+  const [kindFilter,   setKindFilter]   = useState('all'); // 'all' | 'meal' | 'ingredient'
   const fileRefs = useRef({});
+
+  const matches     = m => !filter.trim() || m.n.toLowerCase().includes(filter.trim().toLowerCase());
+  const meals       = savedMeals.filter(m => m.kind !== 'ingredient' && matches(m));
+  const ingredients = savedMeals.filter(m => m.kind === 'ingredient' && matches(m));
+  const showMeals   = kindFilter !== 'ingredient';
+  const showIngs    = kindFilter !== 'meal';
 
   const handleGeneratePhoto = async (meal) => {
     setGeneratingId(meal.id); setGenErr(null);
@@ -39,7 +47,9 @@ export function SavedMealsTab({ savedMeals, removeSavedMeal, setSavedMealPhoto, 
   };
 
   const handleAddToSlot = (meal, slotKey) => {
-    const item = { custom: true, n: meal.n, k: meal.k, p: meal.p, c: meal.c, f: meal.f };
+    // Ingredients go in as one serving, with the basis in the name for clarity
+    const name = meal.kind === 'ingredient' && meal.per ? `${meal.n} (${meal.per})` : meal.n;
+    const item = { custom: true, n: name, k: meal.k, p: meal.p, c: meal.c, f: meal.f };
     if (meal.analysis) item.analysis = meal.analysis;
     if (meal.aiChat) item.aiChat = meal.aiChat;
     addItem(slotKey, item);
@@ -62,15 +72,57 @@ export function SavedMealsTab({ savedMeals, removeSavedMeal, setSavedMealPhoto, 
       {/* header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <div style={{ ...NF, fontSize: 11, letterSpacing: 1.5, color: T.gold, fontWeight: 700 }}>
-          SAVED MEALS — {savedMeals.length}
+          LIBRARY — {savedMeals.length}
         </div>
-        <button onClick={onOpenAddSheet}
-          style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px', borderRadius: 10,
-            border: `1.5px solid ${T.accent}`, background: 'transparent',
-            cursor: 'pointer', fontSize: 12, fontWeight: 600, color: T.accent, ...sf }}>
-          <Plus size={13} /> Add meal
-        </button>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button onClick={() => onOpenAddSheet()}
+            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 10,
+              border: `1.5px solid ${T.accent}`, background: 'transparent',
+              cursor: 'pointer', fontSize: 12, fontWeight: 600, color: T.accent, ...sf }}>
+            <Plus size={13} /> Meal
+          </button>
+          <button onClick={() => onOpenAddSheet('ingredient')}
+            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 10,
+              border: `1.5px solid ${T.gold}`, background: 'transparent',
+              cursor: 'pointer', fontSize: 12, fontWeight: 600, color: T.gold, ...sf }}>
+            <Plus size={13} /> Ingredient
+          </button>
+        </div>
       </div>
+
+      {/* search + type filter */}
+      {savedMeals.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ position: 'relative', marginBottom: 8 }}>
+            <Search size={15} color={T.faint} style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)' }} />
+            <input value={filter} onChange={e => setFilter(e.target.value)}
+              placeholder="Filter by name…"
+              style={{ ...inp, paddingLeft: 36, fontSize: 14 }} />
+            {filter && (
+              <button onClick={() => setFilter('')}
+                style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                  background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex' }}>
+                <X size={14} color={T.faint} />
+              </button>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {[
+              { key: 'all',        label: `All (${meals.length + ingredients.length})` },
+              { key: 'meal',       label: `Meals (${meals.length})` },
+              { key: 'ingredient', label: `Ingredients (${ingredients.length})` },
+            ].map(({ key, label }) => (
+              <button key={key} onClick={() => setKindFilter(key)}
+                style={{ padding: '6px 12px', borderRadius: 99, cursor: 'pointer', fontSize: 12, fontWeight: 600, ...sf,
+                  border: `1.5px solid ${kindFilter === key ? T.accent : T.border}`,
+                  background: kindFilter === key ? T.accentLight : 'transparent',
+                  color: kindFilter === key ? T.accent : T.muted }}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {savedMeals.length === 0 && (
         <div style={{ padding: '48px 24px', textAlign: 'center' }}>
@@ -82,11 +134,34 @@ export function SavedMealsTab({ savedMeals, removeSavedMeal, setSavedMealPhoto, 
         </div>
       )}
 
-      {savedMeals.map(meal => {
-        const selectedSlots = added[meal.id] || new Set();
-        const isGenerating = generatingId === meal.id;
+      {showMeals && meals.length > 0 && kindFilter === 'all' && (
+        <div style={{ ...NF, fontSize: 11, letterSpacing: 1.5, color: T.gold, fontWeight: 700, marginBottom: 12 }}>
+          MEALS — {meals.length}
+        </div>
+      )}
+      {showMeals && meals.map(renderCard)}
 
-        return (
+      {/* ingredients — same cards, own section; used by the AI as personal ground truth */}
+      {showIngs && ingredients.length > 0 && kindFilter === 'all' && (
+        <div style={{ ...NF, fontSize: 11, letterSpacing: 1.5, color: T.gold, fontWeight: 700, margin: '20px 0 12px' }}>
+          INGREDIENTS — {ingredients.length}
+        </div>
+      )}
+      {showIngs && ingredients.map(renderCard)}
+
+      {savedMeals.length > 0 && (showMeals ? meals.length : 0) + (showIngs ? ingredients.length : 0) === 0 && (
+        <p style={{ fontSize: 13, color: T.faint, textAlign: 'center', padding: '32px 0' }}>
+          Nothing matches "{filter}".
+        </p>
+      )}
+    </div>
+  );
+
+  function renderCard(meal) {
+    const selectedSlots = added[meal.id] || new Set();
+    const isGenerating = generatingId === meal.id;
+
+    return (
           <div key={meal.id} style={{ background: T.surface, borderRadius: 18, marginBottom: 10,
             boxShadow: '0 1px 6px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
 
@@ -163,7 +238,9 @@ export function SavedMealsTab({ savedMeals, removeSavedMeal, setSavedMealPhoto, 
                   style={{ fontSize: 15, fontWeight: 700, color: T.ink, marginBottom: 4,
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     cursor: meal.analysis ? 'pointer' : 'default' }}>{meal.n}</div>
-                <div style={{ ...NF, fontSize: 12, color: T.muted }}>{meal.k} kcal · {meal.p}P · {meal.c}C · {meal.f}F</div>
+                <div style={{ ...NF, fontSize: 12, color: T.muted }}>
+                  {meal.kind === 'ingredient' && meal.per ? `per ${meal.per} — ` : ''}{meal.k} kcal · {meal.p}P · {meal.c}C · {meal.f}F
+                </div>
               </div>
               <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
                 <button onClick={() => onEditSavedMeal(meal)}
@@ -203,9 +280,6 @@ export function SavedMealsTab({ savedMeals, removeSavedMeal, setSavedMealPhoto, 
               </div>
             )}
           </div>
-        );
-      })}
-
-    </div>
-  );
+    );
+  }
 }

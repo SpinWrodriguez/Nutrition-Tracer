@@ -138,6 +138,9 @@ export function useAppData(userId = null) {
     [data.savedMeals, mealPhotos]
   );
 
+  // Ingredients are savedMeals entries with kind:'ingredient' — same features, own section
+  const ingredientsList = useMemo(() => savedMeals.filter(m => m.kind === 'ingredient'), [savedMeals]);
+
   const eaten = useMemo(() => SLOTS.reduce((a, s) => {
     if (chk[s.key]) { const t = sumSlot(sel[s.key]); a.k+=t.k; a.p+=t.p; a.c+=t.c; a.f+=t.f; }
     return a;
@@ -311,7 +314,7 @@ export function useAppData(userId = null) {
     const items = toArr(sel[slotKey]).map(v => one(v)).filter(o => o && !o.skip);
     if (!items.length) return;
     (data.savedMeals || []).forEach(m => {
-      if (items.some(o => o.n.toLowerCase() === m.n.toLowerCase())) {
+      if (m.kind !== 'ingredient' && items.some(o => o.n.toLowerCase() === m.n.toLowerCase())) {
         const idbKey = `meal:${m.id}`;
         photoSet(idbKey, photo).catch(() => {});
         storageUpload(userId, idbKey, photo);
@@ -346,7 +349,7 @@ export function useAppData(userId = null) {
 
   const saveMeal = (item, photo = null) => {
     const id = String(Date.now() + Math.random());
-    const existing = (data.savedMeals || []).find(m => m.n.toLowerCase() === item.n.toLowerCase());
+    const existing = (data.savedMeals || []).find(m => m.kind !== 'ingredient' && m.n.toLowerCase() === item.n.toLowerCase());
     if (existing) {
       if (!mealPhotos[existing.id] && photo) {
         photoSet(`meal:${existing.id}`, photo).catch(() => {});
@@ -375,6 +378,44 @@ export function useAppData(userId = null) {
   const updateSavedMeal = (id, updates) =>
     setData(d => ({ ...d, savedMeals: (d.savedMeals || []).map(m => m.id === id ? { ...m, ...updates } : m) }));
 
+  /* ── auto-learned ingredient library ── */
+  // Persist only facts worth remembering: label reads, user-stated values, and
+  // library re-confirmations (recency touch). Never the model's own estimates —
+  // that would freeze guesses as "personal ground truth".
+  const LEARN_SRC = new Set(['label', 'user', 'library']);
+  const INGREDIENT_CAP = 150;
+
+  const learnIngredients = (list) => {
+    const cleaned = (Array.isArray(list) ? list : [])
+      .filter(i => i && LEARN_SRC.has(i.src) && String(i.n || '').trim() && String(i.per || '').trim())
+      .map(i => ({
+        n:   String(i.n).trim().slice(0, 40),
+        per: String(i.per).trim().slice(0, 40),
+        k: Math.max(0, Math.round(+i.k || 0)),
+        p: Math.max(0, Math.round(+i.p || 0)),
+        c: Math.max(0, Math.round(+i.c || 0)),
+        f: Math.max(0, Math.round(+i.f || 0)),
+      }));
+    if (!cleaned.length) return;
+    setData(d => {
+      let arr = [...(d.savedMeals || [])];
+      cleaned.forEach(ing => {
+        const existing = arr.find(m => m.kind === 'ingredient' && m.n.toLowerCase() === ing.n.toLowerCase());
+        if (existing) {
+          arr = arr.map(m => m === existing ? { ...m, ...ing } : m);
+        } else {
+          arr.push({ id: String(Date.now() + Math.random()), kind: 'ingredient', ...ing });
+        }
+      });
+      const ingCount = arr.filter(m => m.kind === 'ingredient').length;
+      if (ingCount > INGREDIENT_CAP) {
+        let drop = ingCount - INGREDIENT_CAP;
+        arr = arr.filter(m => (m.kind === 'ingredient' && drop > 0) ? (drop--, false) : true);
+      }
+      return { ...d, savedMeals: arr };
+    });
+  };
+
   const createSavedMeal = (item, photo = null) => {
     const id = String(Date.now() + Math.random());
     if (photo) {
@@ -396,7 +437,7 @@ export function useAppData(userId = null) {
         SLOTS.forEach(sl => {
           const mealName = dayPlan[sl.key];
           if (!mealName) return;
-          const saved = (d.savedMeals || []).find(m => m.n === mealName);
+          const saved = (d.savedMeals || []).find(m => m.n === mealName && m.kind !== 'ingredient');
           if (saved) {
             const { id: _id, ...item } = saved;
             base[sl.key] = [{ ...item, custom: true }];
@@ -416,7 +457,7 @@ export function useAppData(userId = null) {
         if (existing.length > 0) return;
         const mealName = slotPlan[sl.key];
         if (!mealName) return;
-        const saved = (d.savedMeals || []).find(m => m.n === mealName);
+        const saved = (d.savedMeals || []).find(m => m.n === mealName && m.kind !== 'ingredient');
         if (saved) {
           const { id: _id, ...item } = saved;
           base[sl.key] = [{ ...item, custom: true }];
@@ -511,6 +552,7 @@ export function useAppData(userId = null) {
     toggleCheck, resetWeek, logWeight,
     saveMeal, removeSavedMeal, setSavedMealPhoto: setSavedMealPhotoAlias,
     updateSavedMeal, createSavedMeal,
+    ingredientsList, learnIngredients,
     applyWeekPlan, applyDayPlan, syncPhotoToMealLib,
     weeklyNutrition, weeklyAvg, streak,
     getQuickBackup, getArchiveBackup, importData, clearLocalData,

@@ -3,13 +3,14 @@ import { Camera, Send, Plus, X, ImagePlus } from 'lucide-react';
 import { T, NF, inp } from '../constants.js';
 import { aiAnalyzeFood, compressImage } from '../api.js';
 
-export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm, initial = null, confirmLabel = null }) {
+export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm, initial = null, confirmLabel = null, learnedLibrary = [] }) {
   const [photos,      setPhotos]      = useState([]); // array of data URLs
   const [displayMsgs, setDisplayMsgs] = useState([]);
   const [apiMsgs,     setApiMsgs]     = useState([]);
   const [macros,      setMacros]      = useState(null);
   const [bestPhotoIdx, setBestPhotoIdx] = useState(-1);
   const [photosSent,  setPhotosSent]  = useState(false);
+  const [pendingIngs, setPendingIngs] = useState([]); // last reply's ingredient breakdown, learned on confirm
   const [input,       setInput]       = useState('');
   const [busy,        setBusy]        = useState(false);
   const [err,         setErr]         = useState(null);
@@ -28,7 +29,7 @@ export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm, initial = nul
         k: String(initial.macros.k ?? 0), p: String(initial.macros.p ?? 0),
         c: String(initial.macros.c ?? 0), f: String(initial.macros.f ?? 0),
       } : null);
-      setInput(''); setErr(null); setBusy(false); setBestPhotoIdx(-1);
+      setInput(''); setErr(null); setBusy(false); setBestPhotoIdx(-1); setPendingIngs([]);
       setPhotosSent(false); // seeded photos are re-sent on the next message so the AI can see them
     }
   }, [open]);
@@ -57,11 +58,12 @@ export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm, initial = nul
         : { role: 'user', content: displayText };
 
       const nextApiMsgs = [...apiMsgs, userMsg];
-      const result = await aiAnalyzeFood(nextApiMsgs);
+      const result = await aiAnalyzeFood(nextApiMsgs, learnedLibrary);
       const replyText = result.reply || `${result.name}: ${result.k} kcal, ${result.p}g P, ${result.c}g C, ${result.f}g F`;
 
       setDisplayMsgs(prev => [...prev, { role: 'assistant', text: replyText }]);
       setMacros({ n: result.name || '', k: String(result.k ?? 0), p: String(result.p ?? 0), c: String(result.c ?? 0), f: String(result.f ?? 0) });
+      setPendingIngs(Array.isArray(result.ingredients) ? result.ingredients : []);
       if (attachPhotos && result.photo_index >= 0) setBestPhotoIdx(result.photo_index);
       if (attachPhotos) setPhotosSent(true);
       setApiMsgs([...nextApiMsgs, { role: 'assistant', content: JSON.stringify(result) }]);
@@ -99,7 +101,7 @@ export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm, initial = nul
     if (lastReply) item.analysis = lastReply.text;
     if (displayMsgs.length) item.aiChat = displayMsgs; // full conversation, so it can be resumed later
     const bestPhoto = bestPhotoIdx >= 0 && photos[bestPhotoIdx] ? photos[bestPhotoIdx] : null;
-    onConfirm(item, bestPhoto);
+    onConfirm(item, bestPhoto, pendingIngs);
   };
 
   if (!open) return null;

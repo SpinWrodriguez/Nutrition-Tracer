@@ -1,7 +1,7 @@
 import { Database, Droplets, Plus, X, ScanSearch } from 'lucide-react';
 import { T, NF, inp } from '../constants.js';
 
-export function AddItemSheet({ sheet, onOpenAnalyze, forceEditMode = false }) {
+export function AddItemSheet({ sheet, onOpenAnalyze, forceEditMode = false, ingredientMode = false }) {
   const {
     open, slotMeta, editIdx,
     query, pick, grams, setGrams, unit, scaledDraft,
@@ -157,7 +157,18 @@ export function AddItemSheet({ sheet, onOpenAnalyze, forceEditMode = false }) {
           {!pick && draft && (
             <div style={{ border:`1.5px solid ${T.border}`, borderRadius:16, padding:14, marginBottom:12 }}>
               <input value={draft.n} onChange={e => setDraft(d => ({ ...d, n: e.target.value }))}
-                style={{ ...inp, fontWeight:700, fontSize:15, marginBottom:10 }} placeholder="Meal name" />
+                style={{ ...inp, fontWeight:700, fontSize:15, marginBottom:10 }}
+                placeholder={ingredientMode ? 'Ingredient name' : 'Meal name'} />
+
+              {/* per-serving basis — the macros below are for exactly this amount */}
+              {ingredientMode && (
+                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
+                  <span style={{ fontSize:13, color:T.muted, flexShrink:0 }}>per</span>
+                  <input value={draft.per || ''} onChange={e => setDraft(d => ({ ...d, per: e.target.value }))}
+                    placeholder="e.g. 60 g, 1 slice (22 g)"
+                    style={{ ...inp, flex:1, padding:'8px 12px', fontSize:14 }} />
+                </div>
+              )}
 
               {/* macros grid */}
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:8, marginBottom:10 }}>
@@ -174,7 +185,8 @@ export function AddItemSheet({ sheet, onOpenAnalyze, forceEditMode = false }) {
                 ))}
               </div>
 
-              {/* quantity row */}
+              {/* quantity row — hidden for ingredients (macros are per the stated basis) */}
+              {!ingredientMode && (
               <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10,
                 padding:'8px 12px', background:T.bg, borderRadius:10 }}>
                 <span style={{ fontSize:13, color:T.muted, flexShrink:0 }}>Portions x</span>
@@ -184,6 +196,7 @@ export function AddItemSheet({ sheet, onOpenAnalyze, forceEditMode = false }) {
                   = {Math.round(draft.k * (parseFloat(qty)||1))} kcal
                 </span>
               </div>
+              )}
 
               <button onClick={confirmDraft}
                 style={{ width:'100%', padding:'13px', borderRadius:12, border:'none',
@@ -194,11 +207,11 @@ export function AddItemSheet({ sheet, onOpenAnalyze, forceEditMode = false }) {
             </div>
           )}
 
-          {/* saved meals - hidden when editing or when in saved meals context */}
+          {/* saved meals + ingredients - hidden when editing or when in saved meals context */}
           {editIdx === null && slotMeta?.key !== 'saved' && (
             <div style={{ marginBottom:8 }}>
               <div style={{ fontSize:11, color:T.muted, fontWeight:600, letterSpacing:1, marginBottom:8 }}>
-                SAVED MEALS
+                SAVED MEALS & INGREDIENTS
               </div>
               {savedMeals.length === 0 ? (
                 <p style={{ fontSize:13, color:T.faint, textAlign:'center', padding:'16px 0' }}>
@@ -213,10 +226,15 @@ export function AddItemSheet({ sheet, onOpenAnalyze, forceEditMode = false }) {
                         borderRadius:12, border:`1.5px solid ${T.border}`, background:T.surface, cursor:'pointer',
                         display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
                       <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ fontSize:14, fontWeight:500, color:T.ink,
-                          overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{meal.n}</div>
+                        <div style={{ fontSize:14, fontWeight:500, color:T.ink, display:'flex', alignItems:'center', gap:6,
+                          overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                          {meal.n}
+                          {meal.kind === 'ingredient' && (
+                            <span style={{ fontSize:9, color:T.gold, fontWeight:700, letterSpacing:0.5, flexShrink:0 }}>INGREDIENT</span>
+                          )}
+                        </div>
                         <div style={{ ...NF, fontSize:12, color:T.muted, marginTop:1 }}>
-                          {meal.k} kcal - {meal.p}P - {meal.c}C - {meal.f}F
+                          {meal.kind === 'ingredient' && meal.per ? `per ${meal.per} - ` : ''}{meal.k} kcal - {meal.p}P - {meal.c}C - {meal.f}F
                         </div>
                       </div>
                       {meal.photo && (

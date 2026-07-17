@@ -30,7 +30,8 @@ export default function App() {
     savedMeals:         app.savedMeals,
   });
 
-  const [savedEditMeal, setSavedEditMeal] = useState(null);
+  const [savedEditMeal,  setSavedEditMeal]  = useState(null);
+  const [savedSheetKind, setSavedSheetKind] = useState('meal'); // 'meal' | 'ingredient'
 
   const savedMealsSheet = useItemSheet({
     sel: {}, day: app.day,
@@ -38,19 +39,23 @@ export default function App() {
     saveMeal: null, syncPhotoToMealLib: null,
     savedMeals: app.savedMeals,
     onConfirmItem: (item, photo) => {
+      const isIng = savedSheetKind === 'ingredient';
       if (savedEditMeal) {
-        app.updateSavedMeal(savedEditMeal.id, { n: item.n, k: item.k, p: item.p, c: item.c, f: item.f });
+        app.updateSavedMeal(savedEditMeal.id, { n: item.n, k: item.k, p: item.p, c: item.c, f: item.f,
+          ...(isIng ? { per: item.per || savedEditMeal.per || '' } : {}) });
         if (photo) app.setSavedMealPhoto(savedEditMeal.id, photo);
         setSavedEditMeal(null);
       } else {
-        app.createSavedMeal(item, photo);
+        app.createSavedMeal(isIng ? { ...item, kind: 'ingredient', per: item.per || '' } : item, photo);
       }
     },
   });
 
   const openEditSavedMeal = (meal) => {
     setSavedEditMeal(meal);
-    savedMealsSheet.openSheet('saved', null, { custom: true, n: meal.n, k: meal.k, p: meal.p, c: meal.c, f: meal.f });
+    setSavedSheetKind(meal.kind === 'ingredient' ? 'ingredient' : 'meal');
+    savedMealsSheet.openSheet('saved', null, { custom: true, n: meal.n, k: meal.k, p: meal.p, c: meal.c, f: meal.f,
+      ...(meal.kind === 'ingredient' && meal.per ? { per: meal.per } : {}) });
   };
 
   // clipboard: { slotKey, items, label, fromDay }
@@ -61,7 +66,8 @@ export default function App() {
   const [analysisCtx,   setAnalysisCtx]  = useState(null);
 
   const { day, setDay, tab, setTab, meta, sel, chk, photos, eaten, planned, adh } = app;
-  const savedMealNames = useMemo(() => new Set(app.savedMeals.map(m => m.n.toLowerCase())), [app.savedMeals]);
+  const savedMealNames = useMemo(() =>
+    new Set(app.savedMeals.filter(m => m.kind !== 'ingredient').map(m => m.n.toLowerCase())), [app.savedMeals]);
   const { openSheet, closeSheet, open, generatingSlot, photoErr, setPhotoErr, handleGeneratePhoto } = sheet;
 
   const todayISO = localDateISO();
@@ -144,7 +150,7 @@ export default function App() {
     const emptySlots    = slotInfo.filter(s => !s.hasItems).map(s => s.key);
     const filledSummary = slotInfo.filter(s => s.hasItems).map(s => `${s.label}: ${s.summary}`).join('; ');
     const plan = await aiGenerateDayPlan({
-      savedMeals: app.savedMeals, goals: app.goals,
+      savedMeals: app.savedMeals.filter(m => m.kind !== 'ingredient'), goals: app.goals,
       dayLabel: dm.name, emptySlots, filledSummary,
     });
     app.applyDayPlan(day, plan);
@@ -347,7 +353,7 @@ export default function App() {
             setSavedMealPhoto={app.setSavedMealPhoto}
             addItem={app.addItem}
             setSlotPhoto={app.setSlotPhoto}
-            onOpenAddSheet={() => savedMealsSheet.openSheet('saved')}
+            onOpenAddSheet={(kind) => { setSavedSheetKind(kind === 'ingredient' ? 'ingredient' : 'meal'); savedMealsSheet.openSheet('saved'); }}
             onEditSavedMeal={openEditSavedMeal}
             onViewAnalysis={meal => setAnalysisCtx({ type:'saved', meal })}
           />
@@ -359,6 +365,7 @@ export default function App() {
         dayName: meta.name,
         goals:   app.goals,
         eaten:   eaten,
+        ingredients: app.ingredientsList,
         slots:   SLOTS.map(s => ({
           label:   s.label,
           items:   toArr(sel[s.key]).map(v => one(v)).filter(Boolean),
@@ -391,10 +398,11 @@ export default function App() {
         <AddItemSheet
           sheet={{
             ...savedMealsSheet,
-            slotMeta: { label: savedEditMeal ? savedEditMeal.n : 'Saved Meals', key: 'saved' },
-            closeSheet: () => { savedMealsSheet.closeSheet(); setSavedEditMeal(null); },
+            slotMeta: { label: savedEditMeal ? savedEditMeal.n : (savedSheetKind === 'ingredient' ? 'New Ingredient' : 'Saved Meals'), key: 'saved' },
+            closeSheet: () => { savedMealsSheet.closeSheet(); setSavedEditMeal(null); setSavedSheetKind('meal'); },
           }}
           forceEditMode={!!savedEditMeal}
+          ingredientMode={savedSheetKind === 'ingredient'}
           onOpenAnalyze={() => { savedMealsSheet.closeSheet(); setSavedEditMeal(null); setAnalyzeSaved(true); }}
         />
       )}
@@ -403,16 +411,18 @@ export default function App() {
       <AnalyzeSheet
         open={!!analyzeSlot}
         slotMeta={SLOTS.find(s => s.key === analyzeSlot)}
+        learnedLibrary={app.ingredientsList}
         onClose={() => setAnalyzeSlot(null)}
-        onConfirm={(item, photo) => { app.addItem(analyzeSlot, item); if (photo) app.setSlotPhoto(analyzeSlot, photo); setAnalyzeSlot(null); }}
+        onConfirm={(item, photo, ings) => { app.addItem(analyzeSlot, item); if (photo) app.setSlotPhoto(analyzeSlot, photo); app.learnIngredients(ings); setAnalyzeSlot(null); }}
       />
 
       {/* ── photo + chat analyzer sheet (saved meals) ── */}
       <AnalyzeSheet
         open={analyzeSaved}
         slotMeta={{ label: 'Saved Meals' }}
+        learnedLibrary={app.ingredientsList}
         onClose={() => setAnalyzeSaved(false)}
-        onConfirm={(item, photo) => { app.createSavedMeal(item, photo); setAnalyzeSaved(false); }}
+        onConfirm={(item, photo, ings) => { app.createSavedMeal(item, photo); app.learnIngredients(ings); setAnalyzeSaved(false); }}
       />
 
       {/* ── continue a prior AI analysis (tap item / meal name) ── */}
@@ -431,8 +441,9 @@ export default function App() {
               macros:  src,
             }}
             confirmLabel={analysisCtx.type === 'slot' ? 'Update item' : 'Update saved meal'}
+            learnedLibrary={app.ingredientsList}
             onClose={() => setAnalysisCtx(null)}
-            onConfirm={(item, newPhoto) => {
+            onConfirm={(item, newPhoto, ings) => {
               if (analysisCtx.type === 'slot') {
                 app.replaceItem(analysisCtx.slotKey, analysisCtx.idx, item);
                 if (newPhoto) app.setSlotPhoto(analysisCtx.slotKey, newPhoto);
@@ -441,6 +452,7 @@ export default function App() {
                 app.updateSavedMeal(analysisCtx.meal.id, updates);
                 if (newPhoto) app.setSavedMealPhoto(analysisCtx.meal.id, newPhoto);
               }
+              app.learnIngredients(ings);
               setAnalysisCtx(null);
             }}
           />

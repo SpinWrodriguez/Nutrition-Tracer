@@ -160,7 +160,10 @@ export function useItemSheet({ sel, day, addItem, replaceItem, setSlotPhoto, sav
 
   const confirmSavedMeal = meal => confirmItem(
     open,
-    { custom:true, n:meal.n, k:meal.k, p:meal.p, c:meal.c, f:meal.f,
+    { custom:true,
+      // Ingredients go in as one serving, with the basis in the name for clarity
+      n: meal.kind === 'ingredient' && meal.per ? `${meal.n} (${meal.per})` : meal.n,
+      k:meal.k, p:meal.p, c:meal.c, f:meal.f,
       ...(meal.analysis ? { analysis: meal.analysis } : {}), ...(meal.aiChat ? { aiChat: meal.aiChat } : {}) },
     meal.photo || null,
   );
