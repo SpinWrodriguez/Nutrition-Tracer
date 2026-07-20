@@ -378,44 +378,6 @@ export function useAppData(userId = null) {
   const updateSavedMeal = (id, updates) =>
     setData(d => ({ ...d, savedMeals: (d.savedMeals || []).map(m => m.id === id ? { ...m, ...updates } : m) }));
 
-  /* ── auto-learned ingredient library ── */
-  // Persist only facts worth remembering: label reads, user-stated values, and
-  // library re-confirmations (recency touch). Never the model's own estimates —
-  // that would freeze guesses as "personal ground truth".
-  const LEARN_SRC = new Set(['label', 'user', 'library']);
-  const INGREDIENT_CAP = 150;
-
-  const learnIngredients = (list) => {
-    const cleaned = (Array.isArray(list) ? list : [])
-      .filter(i => i && LEARN_SRC.has(i.src) && String(i.n || '').trim() && String(i.per || '').trim())
-      .map(i => ({
-        n:   String(i.n).trim().slice(0, 40),
-        per: String(i.per).trim().slice(0, 40),
-        k: Math.max(0, Math.round(+i.k || 0)),
-        p: Math.max(0, Math.round(+i.p || 0)),
-        c: Math.max(0, Math.round(+i.c || 0)),
-        f: Math.max(0, Math.round(+i.f || 0)),
-      }));
-    if (!cleaned.length) return;
-    setData(d => {
-      let arr = [...(d.savedMeals || [])];
-      cleaned.forEach(ing => {
-        const existing = arr.find(m => m.kind === 'ingredient' && m.n.toLowerCase() === ing.n.toLowerCase());
-        if (existing) {
-          arr = arr.map(m => m === existing ? { ...m, ...ing } : m);
-        } else {
-          arr.push({ id: String(Date.now() + Math.random()), kind: 'ingredient', ...ing });
-        }
-      });
-      const ingCount = arr.filter(m => m.kind === 'ingredient').length;
-      if (ingCount > INGREDIENT_CAP) {
-        let drop = ingCount - INGREDIENT_CAP;
-        arr = arr.filter(m => (m.kind === 'ingredient' && drop > 0) ? (drop--, false) : true);
-      }
-      return { ...d, savedMeals: arr };
-    });
-  };
-
   const createSavedMeal = (item, photo = null) => {
     const id = String(Date.now() + Math.random());
     if (photo) {
@@ -552,7 +514,7 @@ export function useAppData(userId = null) {
     toggleCheck, resetWeek, logWeight,
     saveMeal, removeSavedMeal, setSavedMealPhoto: setSavedMealPhotoAlias,
     updateSavedMeal, createSavedMeal,
-    ingredientsList, learnIngredients,
+    ingredientsList,
     applyWeekPlan, applyDayPlan, syncPhotoToMealLib,
     weeklyNutrition, weeklyAvg, streak,
     getQuickBackup, getArchiveBackup, importData, clearLocalData,

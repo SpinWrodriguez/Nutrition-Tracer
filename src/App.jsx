@@ -413,16 +413,20 @@ export default function App() {
         slotMeta={SLOTS.find(s => s.key === analyzeSlot)}
         learnedLibrary={app.ingredientsList}
         onClose={() => setAnalyzeSlot(null)}
-        onConfirm={(item, photo, ings) => { app.addItem(analyzeSlot, item); if (photo) app.setSlotPhoto(analyzeSlot, photo); app.learnIngredients(ings); setAnalyzeSlot(null); }}
+        onConfirm={(item, photo) => { app.addItem(analyzeSlot, item); if (photo) app.setSlotPhoto(analyzeSlot, photo); setAnalyzeSlot(null); }}
       />
 
-      {/* ── photo + chat analyzer sheet (saved meals) ── */}
+      {/* ── photo + chat analyzer sheet (saved meals / ingredients) ── */}
       <AnalyzeSheet
         open={analyzeSaved}
-        slotMeta={{ label: 'Saved Meals' }}
+        slotMeta={{ label: savedSheetKind === 'ingredient' ? 'New Ingredient' : 'Saved Meals' }}
         learnedLibrary={app.ingredientsList}
-        onClose={() => setAnalyzeSaved(false)}
-        onConfirm={(item, photo, ings) => { app.createSavedMeal(item, photo); app.learnIngredients(ings); setAnalyzeSaved(false); }}
+        confirmLabel={savedSheetKind === 'ingredient' ? 'Save as ingredient' : null}
+        onClose={() => { setAnalyzeSaved(false); setSavedSheetKind('meal'); }}
+        onConfirm={(item, photo) => {
+          app.createSavedMeal(savedSheetKind === 'ingredient' ? { ...item, kind: 'ingredient', per: '' } : item, photo);
+          setAnalyzeSaved(false); setSavedSheetKind('meal');
+        }}
       />
 
       {/* ── continue a prior AI analysis (tap item / meal name) ── */}
@@ -443,7 +447,7 @@ export default function App() {
             confirmLabel={analysisCtx.type === 'slot' ? 'Update item' : 'Update saved meal'}
             learnedLibrary={app.ingredientsList}
             onClose={() => setAnalysisCtx(null)}
-            onConfirm={(item, newPhoto, ings) => {
+            onConfirm={(item, newPhoto) => {
               if (analysisCtx.type === 'slot') {
                 app.replaceItem(analysisCtx.slotKey, analysisCtx.idx, item);
                 if (newPhoto) app.setSlotPhoto(analysisCtx.slotKey, newPhoto);
@@ -452,7 +456,6 @@ export default function App() {
                 app.updateSavedMeal(analysisCtx.meal.id, updates);
                 if (newPhoto) app.setSavedMealPhoto(analysisCtx.meal.id, newPhoto);
               }
-              app.learnIngredients(ings);
               setAnalysisCtx(null);
             }}
           />

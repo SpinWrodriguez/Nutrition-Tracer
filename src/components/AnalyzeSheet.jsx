@@ -10,7 +10,6 @@ export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm, initial = nul
   const [macros,      setMacros]      = useState(null);
   const [bestPhotoIdx, setBestPhotoIdx] = useState(-1);
   const [photosSent,  setPhotosSent]  = useState(false);
-  const [pendingIngs, setPendingIngs] = useState([]); // last reply's ingredient breakdown, learned on confirm
   const [input,       setInput]       = useState('');
   const [busy,        setBusy]        = useState(false);
   const [err,         setErr]         = useState(null);
@@ -29,7 +28,7 @@ export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm, initial = nul
         k: String(initial.macros.k ?? 0), p: String(initial.macros.p ?? 0),
         c: String(initial.macros.c ?? 0), f: String(initial.macros.f ?? 0),
       } : null);
-      setInput(''); setErr(null); setBusy(false); setBestPhotoIdx(-1); setPendingIngs([]);
+      setInput(''); setErr(null); setBusy(false); setBestPhotoIdx(-1);
       setPhotosSent(false); // seeded photos are re-sent on the next message so the AI can see them
     }
   }, [open]);
@@ -63,7 +62,6 @@ export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm, initial = nul
 
       setDisplayMsgs(prev => [...prev, { role: 'assistant', text: replyText }]);
       setMacros({ n: result.name || '', k: String(result.k ?? 0), p: String(result.p ?? 0), c: String(result.c ?? 0), f: String(result.f ?? 0) });
-      setPendingIngs(Array.isArray(result.ingredients) ? result.ingredients : []);
       if (attachPhotos && result.photo_index >= 0) setBestPhotoIdx(result.photo_index);
       if (attachPhotos) setPhotosSent(true);
       setApiMsgs([...nextApiMsgs, { role: 'assistant', content: JSON.stringify(result) }]);
@@ -101,7 +99,7 @@ export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm, initial = nul
     if (lastReply) item.analysis = lastReply.text;
     if (displayMsgs.length) item.aiChat = displayMsgs; // full conversation, so it can be resumed later
     const bestPhoto = bestPhotoIdx >= 0 && photos[bestPhotoIdx] ? photos[bestPhotoIdx] : null;
-    onConfirm(item, bestPhoto, pendingIngs);
+    onConfirm(item, bestPhoto);
   };
 
   if (!open) return null;

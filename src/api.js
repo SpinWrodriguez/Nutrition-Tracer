@@ -480,12 +480,6 @@ For ADVISORY QUESTIONS (e.g. "how much to skip to save 100 kcal?", "is this high
 - Return the CURRENT macro values UNCHANGED — do not modify k, p, c, f.
 - Reply can be 2-4 sentences.
 
-INGREDIENT BREAKDOWN — every reply must also include "ingredients": the distinct food components of THIS meal only, with the values you actually used:
-- One entry per component, max 10. List ONLY foods that are part of this meal — NEVER copy library entries that are not in the meal.
-- "per" is the amount as a short human string (e.g. "60 g", "1 slice (25 g)", "250 ml"); k/p/c/f are for exactly that amount. If the user stated values on a specific basis (e.g. "220 kcal per 60 g"), use that basis for "per", not the total eaten.
-- "src" is where the numbers came from: "label" = read from a photo label, "user" = the user stated the values, "library" = taken from the saved ingredient library, "estimate" = your own estimate.
-- On corrections/additions, return the updated full list reflecting the change. On advisory questions, return the list unchanged.
-
 The "reply" field must show your full working so the user can verify it. Structure it like this:
 - What you identified in each photo ("I can see roast chicken, rice, and broccoli" or "Nutrition label shows 420 kcal per 100g serving")
 - Your portion estimate and how you arrived at it ("The chicken looks like ~200g based on the plate size")
@@ -494,7 +488,7 @@ The "reply" field must show your full working so the user can verify it. Structu
 Keep it concise but complete — 3-6 sentences max.
 
 ALWAYS respond with valid JSON only — no other text:
-{"reply":"full working as described above","name":"specific food name max 26 chars","k":<kcal int>,"p":<protein g int>,"c":<carbs g int>,"f":<fat g int>,"photo_index":<int>,"ingredients":[{"n":"component name","per":"amount string","k":<int>,"p":<int>,"c":<int>,"f":<int>,"src":"label"|"user"|"library"|"estimate"}]}`;
+{"reply":"full working as described above","name":"specific food name max 26 chars","k":<kcal int>,"p":<protein g int>,"c":<carbs g int>,"f":<fat g int>,"photo_index":<int>}`;
 
   const libBlock = learned.length
     ? '\n\nSAVED INGREDIENT LIBRARY (personal ground truth — see priority 3):\n' +
