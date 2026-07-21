@@ -22,6 +22,7 @@ export function useItemSheet({ sel, day, addItem, replaceItem, setSlotPhoto, sav
   const [fatSecretLoading, setFatSecretLoading] = useState(false);
   const [fetchingDetail, setFetchingDetail] = useState(false);
   const [imgPreview,     setImgPreview]     = useState(null);
+  const [pickedPhoto,    setPickedPhoto]    = useState(null);
   const [generatingSlot, setGeneratingSlot] = useState(null);
   const [photoErr,       setPhotoErr]       = useState(null);
   const fatSecretTimer = useRef(null);
@@ -39,7 +40,7 @@ export function useItemSheet({ sel, day, addItem, replaceItem, setSlotPhoto, sav
 
   const reset = () => {
     setQuery(''); setHits([]); setFatSecretHits([]); setFatSecretLoading(false);
-    setFetchingDetail(false); setImgPreview(null); setPick(null);
+    setFetchingDetail(false); setImgPreview(null); setPickedPhoto(null); setPick(null);
     setGrams('150'); setDraft(null); setQty('1'); setAiErr(null); setBusy(false);
     setIsLiquid(false); setEditIdx(null);
     if (fatSecretTimer.current) clearTimeout(fatSecretTimer.current);
@@ -72,8 +73,13 @@ export function useItemSheet({ sel, day, addItem, replaceItem, setSlotPhoto, sav
       setGrams(String(o._servingG || 100));
       setIsLiquid(o._isLiquid || false);
     } else {
-      setDraft({ custom:true, n:o.n, k:o.k, p:o.p, c:o.c, f:o.f,
+      // _portionBase holds the fixed per-portion macros; _portion is the last multiplier
+      // applied. Restoring both (instead of the already-scaled totals) means editing again
+      // always rescales from the same reference amount rather than compounding on the current total.
+      const base = o._portionBase || { k:o.k, p:o.p, c:o.c, f:o.f };
+      setDraft({ custom:true, n:o.n, k:base.k, p:base.p, c:base.c, f:base.f,
         ...(o.analysis ? { analysis: o.analysis } : {}), ...(o.aiChat ? { aiChat: o.aiChat } : {}) });
+      setQty(String(o._portion || 1));
     }
   };
 
@@ -145,28 +151,38 @@ export function useItemSheet({ sel, day, addItem, replaceItem, setSlotPhoto, sav
   const confirmDraft = async () => {
     if (!draft) return;
     const q = Math.max(0.1, parseFloat(qty) || 1);
+    const base = {
+      k: Math.max(0, +draft.k || 0), p: Math.max(0, +draft.p || 0),
+      c: Math.max(0, +draft.c || 0), f: Math.max(0, +draft.f || 0),
+    };
     const final = {
       ...draft,
-      k: Math.max(0, Math.round((+draft.k || 0) * q)),
-      p: Math.max(0, Math.round((+draft.p || 0) * q)),
-      c: Math.max(0, Math.round((+draft.c || 0) * q)),
-      f: Math.max(0, Math.round((+draft.f || 0) * q)),
+      k: Math.round(base.k * q), p: Math.round(base.p * q),
+      c: Math.round(base.c * q), f: Math.round(base.f * q),
+      _portionBase: base, _portion: q,
     };
-    const photo = imgPreview ? await compressImage(imgPreview) : null;
+    const photo = pickedPhoto || (imgPreview ? await compressImage(imgPreview) : null);
     confirmItem(open, final, photo);
   };
 
   const confirmCatalog = id => confirmItem(open, id);
 
-  const confirmSavedMeal = meal => confirmItem(
-    open,
-    { custom:true,
+  // Loads a saved meal into the draft editor (with its own Portions x control) instead of
+  // adding it immediately at 1x — lets the portion be set before it's committed to the slot.
+  const pickSavedMeal = meal => {
+    setPick(null); setFatSecretHits([]); setFatSecretLoading(false); setFetchingDetail(false);
+    if (fatSecretTimer.current) clearTimeout(fatSecretTimer.current);
+    setImgPreview(null);
+    setPickedPhoto(meal.photo || null);
+    setQty('1');
+    setDraft({
+      custom: true,
       // Ingredients go in as one serving, with the basis in the name for clarity
       n: meal.kind === 'ingredient' && meal.per ? `${meal.n} (${meal.per})` : meal.n,
-      k:meal.k, p:meal.p, c:meal.c, f:meal.f,
-      ...(meal.analysis ? { analysis: meal.analysis } : {}), ...(meal.aiChat ? { aiChat: meal.aiChat } : {}) },
-    meal.photo || null,
-  );
+      k: meal.k, p: meal.p, c: meal.c, f: meal.f,
+      ...(meal.analysis ? { analysis: meal.analysis } : {}), ...(meal.aiChat ? { aiChat: meal.aiChat } : {}),
+    });
+  };
 
   const handleGeneratePhoto = async slotKey => {
     const items = toArr(sel[slotKey]);
@@ -195,7 +211,7 @@ export function useItemSheet({ sel, day, addItem, replaceItem, setSlotPhoto, sav
     openSheet, closeSheet, onQuery,
     handlePickFatSecret, clearPick,
     runAI, handleImageCapture,
-    confirmScaled, confirmDraft, confirmSavedMeal,
+    confirmScaled, confirmDraft, pickSavedMeal,
     handleGeneratePhoto,
   };
 }

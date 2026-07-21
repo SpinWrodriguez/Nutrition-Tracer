@@ -11,7 +11,7 @@ export function AddItemSheet({ sheet, onOpenAnalyze, forceEditMode = false, ingr
     savedMeals,
     closeSheet, onQuery,
     handlePickFatSecret, clearPick,
-    confirmScaled, confirmDraft, confirmSavedMeal,
+    confirmScaled, confirmDraft, pickSavedMeal,
   } = sheet;
 
   return (
@@ -221,26 +221,28 @@ export function AddItemSheet({ sheet, onOpenAnalyze, forceEditMode = false, ingr
                 savedMeals
                   .filter(m => !query.trim() || m.n.toLowerCase().includes(query.toLowerCase()))
                   .map(meal => (
-                    <button key={meal.id} onClick={() => confirmSavedMeal(meal)}
-                      style={{ width:'100%', textAlign:'left', padding:'12px 14px', marginBottom:6,
+                    <button key={meal.id} onClick={() => pickSavedMeal(meal)}
+                      style={{ width:'100%', textAlign:'left', padding:0, marginBottom:6,
                         borderRadius:12, border:`1.5px solid ${T.border}`, background:T.surface, cursor:'pointer',
-                        display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ fontSize:14, fontWeight:500, color:T.ink, display:'flex', alignItems:'center', gap:6,
-                          overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                          {meal.n}
-                          {meal.kind === 'ingredient' && (
-                            <span style={{ fontSize:9, color:T.gold, fontWeight:700, letterSpacing:0.5, flexShrink:0 }}>INGREDIENT</span>
-                          )}
-                        </div>
-                        <div style={{ ...NF, fontSize:12, color:T.muted, marginTop:1 }}>
-                          {meal.kind === 'ingredient' && meal.per ? `per ${meal.per} - ` : ''}{meal.k} kcal - {meal.p}P - {meal.c}C - {meal.f}F
-                        </div>
-                      </div>
+                        overflow:'hidden', display:'block' }}>
                       {meal.photo && (
-                        <img src={meal.photo} alt="" style={{ width:36, height:36, borderRadius:8, objectFit:'cover', flexShrink:0 }} />
+                        <img src={meal.photo} alt="" style={{ width:'100%', height:90, objectFit:'cover', display:'block' }} />
                       )}
-                      <Plus size={14} color={T.accentSoft} style={{ flexShrink:0 }} />
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'10px 14px' }}>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontSize:14, fontWeight:500, color:T.ink, display:'flex', alignItems:'center', gap:6,
+                            overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                            {meal.n}
+                            {meal.kind === 'ingredient' && (
+                              <span style={{ fontSize:9, color:T.gold, fontWeight:700, letterSpacing:0.5, flexShrink:0 }}>INGREDIENT</span>
+                            )}
+                          </div>
+                          <div style={{ ...NF, fontSize:12, color:T.muted, marginTop:1 }}>
+                            {meal.kind === 'ingredient' && meal.per ? `per ${meal.per} - ` : ''}{meal.k} kcal - {meal.p}P - {meal.c}C - {meal.f}F
+                          </div>
+                        </div>
+                        <Plus size={14} color={T.accentSoft} style={{ flexShrink:0 }} />
+                      </div>
                     </button>
                   ))
               )}
