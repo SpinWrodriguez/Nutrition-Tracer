@@ -48,7 +48,7 @@ export function AddItemSheet({ sheet, onOpenAnalyze, forceEditMode = false, ingr
             <Database size={16} color={T.faint} style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)' }} />
             <input value={query} onChange={e => onQuery(e.target.value)}
               placeholder="Search foods..."
-              style={{ ...inp, paddingLeft:38 }} autoFocus />
+              style={{ ...inp, paddingLeft:38 }} />
           </div>
 
           {/* FatSecret results */}
