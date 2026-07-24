@@ -167,21 +167,21 @@ export function useItemSheet({ sel, day, addItem, replaceItem, setSlotPhoto, sav
 
   const confirmCatalog = id => confirmItem(open, id);
 
-  // Loads a saved meal into the draft editor (with its own Portions x control) instead of
-  // adding it immediately at 1x — lets the portion be set before it's committed to the slot.
+  // Adds a saved meal/ingredient straight to the slot at 1x and closes the sheet — the slot
+  // was already chosen before opening the sheet, so there's nothing left to review. Portion
+  // can still be changed afterward by editing the item, which is why _portionBase/_portion
+  // are stamped here (same shape confirmDraft produces).
   const pickSavedMeal = meal => {
-    setPick(null); setFatSecretHits([]); setFatSecretLoading(false); setFetchingDetail(false);
-    if (fatSecretTimer.current) clearTimeout(fatSecretTimer.current);
-    setImgPreview(null);
-    setPickedPhoto(meal.photo || null);
-    setQty('1');
-    setDraft({
+    const base = { k: meal.k, p: meal.p, c: meal.c, f: meal.f };
+    const final = {
       custom: true,
       // Ingredients go in as one serving, with the basis in the name for clarity
       n: meal.kind === 'ingredient' && meal.per ? `${meal.n} (${meal.per})` : meal.n,
-      k: meal.k, p: meal.p, c: meal.c, f: meal.f,
+      ...base,
+      _portionBase: base, _portion: 1,
       ...(meal.analysis ? { analysis: meal.analysis } : {}), ...(meal.aiChat ? { aiChat: meal.aiChat } : {}),
-    });
+    };
+    confirmItem(open, final, meal.photo || null);
   };
 
   const handleGeneratePhoto = async slotKey => {
