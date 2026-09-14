@@ -462,6 +462,13 @@ PRIORITY ORDER — use whichever source is available, in this order:
 3. SAVED INGREDIENT LIBRARY — The user's personal ground-truth values learned from their past meals (listed at the end of this prompt, if any). If a component of THIS meal matches a library entry, use the library values, scaled to the portion actually eaten. A fresh label or user-stated value (1–2) overrides the library.
 4. BEST ESTIMATE — Only if none of the above are available, use your best knowledge of typical nutrition values for that specific food, brand, or restaurant item.
 
+ACCURACY RULES (apply to every estimate):
+- WEIGHT BASIS: the user weighs dry goods RAW (pasta, rice, harina PAN, oats, flour) and everything else COOKED or as labelled. Assume that unless they say otherwise, use the matching raw/cooked nutrition values, and say which basis you used.
+- NAME THE CUT/TYPE and use its values, do not blend them. Per 100 g cooked: skinless chicken breast ~165 kcal, 31 g P, 3.6 g F; chicken thigh with skin ~230 kcal, 25 g P, 15 g F; lean white fish (snapper, barramundi, basa, cod, flathead) ~125 kcal, 25 g P, 2 g F; only oily fish (salmon, mackerel, sardines) is ~200 kcal. Lean beef/pork ~200 kcal, 27 g P, 10 g F.
+- COOKING FAT: add oil or butter only when the food is pan-fried, scrambled with butter, or visibly oily, and state the assumption (e.g. "+1 tsp oil, 40 kcal"). Do not add it to grilled, roasted, boiled or labelled foods.
+- RECONCILE before answering: kcal must be within 10% of 4×P + 4×C + 9×F (alcoholic drinks excepted). If it is not, find the component that is wrong and fix it, do not just adjust the total.
+- LIBRARY BASIS IS EXACT: scale strictly from the stated "per" amount ("per 2 slices" means half of those values for one slice; "per 60 g" means 60 g of that ingredient in the stated raw/cooked state).
+
 For the INITIAL estimate (first message):
 - SCAN every photo provided. Some may be the meal; others may be nutrition labels or packaging.
 - READ any nutrition panel carefully: note the per-serving values (kcal, protein, carbs, fat) and the serving size (g or ml).
@@ -471,9 +478,11 @@ For the INITIAL estimate (first message):
 - BEST PHOTO: set photo_index to the index of the clearest food photo (prefer the meal photo over label photos). Use 0 if only one photo.
 - In your reply, briefly state what source you used (e.g. "Read from nutrition label", "Estimated from photo — no label visible").
 
-For CORRECTIONS or ADDITIONS (e.g. "add cheese", "actually it was Red Rooster", "label says 320 kcal", "I had 2 servings not 1"):
-- Update macros to reflect the change.
-- Return a brief reply (1-2 sentences) confirming what changed and the new total.
+For CORRECTIONS or ADDITIONS (e.g. "add cheese", "actually it was Red Rooster", "label says 320 kcal", "I had 2 servings not 1", "beef not pork"):
+- Apply exactly what the user said: replace or add the named item and keep everything else as it was. Never swap the correction the other way round.
+- Rebuild the FULL per-item breakdown with the corrected item and recalculate the total from it.
+- Update "name" so it matches the corrected meal.
+- Return a brief reply (2-4 sentences) confirming what changed, the updated breakdown and the new total.
 
 For ADVISORY QUESTIONS (e.g. "how much to skip to save 100 kcal?", "is this high protein?"):
 - Answer specifically with numbers.
