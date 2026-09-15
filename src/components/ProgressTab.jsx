@@ -23,7 +23,7 @@ function AvgRow({ label, value, goal, unit, over }) {
   );
 }
 
-export function ProgressTab({ weeklyNutrition, weeklyAvg, wStats, weekData, allWeights, streak, goals, onAiSummary, onAiPlan }) {
+export function ProgressTab({ weeklyNutrition, weeklyAvg, wStats, weekData, allWeights, markers = [], streak, goals, onAiSummary, onAiPlan }) {
   const isProtein = goals.focus === 'protein';
   const [weightFilter, setWeightFilter] = useState('week');
 
@@ -59,6 +59,15 @@ export function ProgressTab({ weeklyNutrition, weeklyAvg, wStats, weekData, allW
       });
   })();
   const hasWeight = weightChartData.some(d => d.kg !== null);
+
+  // Map each marker onto the x value ('day') of the chart point it belongs to.
+  // week/month views: first point on or after the marker date; 'all' view: the point for its month.
+  const markerLines = markers.flatMap(m => {
+    const pt = weightFilter === 'all'
+      ? weightChartData.find(p => p.date === m.date.slice(0, 7))
+      : weightChartData.find(p => p.date >= m.date);
+    return pt ? [{ x: pt.day, label: m.label, key: `${m.date}:${m.label}` }] : [];
+  });
 
   const barData  = weeklyNutrition.map(d => ({
     day:     d.day,
@@ -187,6 +196,10 @@ export function ProgressTab({ weeklyNutrition, weeklyAvg, wStats, weekData, allW
                 <YAxis domain={['auto','auto']} tick={{ fontSize:10, fill:T.muted }} axisLine={false} tickLine={false} width={32} />
                 <Tooltip contentStyle={{ borderRadius:10, border:`1px solid ${T.border}`, fontSize:12 }}
                   formatter={v => v === null ? ['—','Weight'] : [`${v} kg`,'Weight']} />
+                {markerLines.map(m => (
+                  <ReferenceLine key={m.key} x={m.x} stroke={T.gold} strokeDasharray="3 3" strokeWidth={1.5}
+                    label={{ value: m.label, position:'insideTopLeft', fontSize:9, fill:T.gold, fontWeight:600 }} />
+                ))}
                 <Line type="monotone" dataKey="kg" stroke={T.accent} strokeWidth={2.5}
                   dot={{ r:3, fill:T.accent }} activeDot={{ r:5 }} connectNulls={false} />
               </LineChart>
