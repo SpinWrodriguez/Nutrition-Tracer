@@ -23,7 +23,7 @@ Repo: GitHub Pages deployment via `.github/workflows/deploy.yml`
 ## Architecture
 
 ### Data storage (two-layer)
-Text data (meals, checks, weights, goals, savedMeals, exercise):
+Text data (meals, checks, weights, goals, savedMeals, exercise, markers):
 - Written to `localStorage` key `nt-v2` on every change
 - Debounced 2s upsert to Supabase `nutrition_data` table (JSONB column `data`, keyed by `userId`)
 
@@ -113,6 +113,7 @@ Ingredients are `savedMeals` entries with `kind: 'ingredient'` and `per` (free-f
 - `replaceItem(slotKey, idx, item)` — replaces item (edit)
 - `toggleCheck(slotKey)` — marks slot eaten/uneaten
 - `logWeight(kg)` — adds weight entry for current day
+- `addMarker(date, label)` / `removeMarker(idx)` — `data.markers` = `[{ date, label }]`, drawn as labelled dashed vertical lines on the Progress weight chart (week/month: first point on or after the date; all: the month's point). Managed in Settings → "Weight chart markers". `normalizeData` seeds `[{ 2026-08-31, "Creatine start" }]` once when the field is absent; an empty array is preserved (never re-seeded).
 - `addExercise(name, kcal)` / `removeExercise(idx)` — exercise log for current day (`data.exercise[date]` = `[{ n, k }]`). Powers the deficit display in GuideTab: deficit = `goals.maintenance` (default 2200) + exercise − eaten. **Deficit-display model** — exercise never raises the eating target or macros, it only deepens the shown deficit. `weeklyDeficit` memo rolls it up across logged days of the week.
 - `saveMeal(item, photo?)` — saves to savedMeals library
 - `removeSavedMeal(id)` — removes from library

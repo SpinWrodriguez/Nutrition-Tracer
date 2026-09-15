@@ -306,6 +306,7 @@ export default function App() {
             wStats={app.wStats}
             weekData={app.weekData}
             allWeights={app.weights}
+            markers={app.markers}
             streak={app.streak}
             goals={app.goals}
             onAiSummary={onAiSummary}
@@ -320,6 +321,7 @@ export default function App() {
             day={app.day}
             logWeight={app.logWeight}
             wStats={app.wStats}
+            markers={app.markers} addMarker={app.addMarker} removeMarker={app.removeMarker}
             goals={app.goals} updateGoals={app.updateGoals}
             theme={theme} toggleTheme={toggleTheme}
             showGuide={showGuide} toggleGuide={toggleGuide}

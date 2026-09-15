@@ -1,10 +1,21 @@
 import { useRef, useState } from 'react';
-import { Plus, Download, Upload, CheckCircle, AlertCircle, LogOut } from 'lucide-react';
+import { Plus, X, Download, Upload, CheckCircle, AlertCircle, LogOut } from 'lucide-react';
 import { T, NF, inp } from '../constants.js';
 import { StatCard } from './ui.jsx';
 
-export function SettingsTab({ wInput, setWInput, day, logWeight, wStats, goals, updateGoals, theme, toggleTheme, showGuide, toggleGuide, getQuickBackup, getArchiveBackup, importData, userEmail, onSignOut }) {
+export function SettingsTab({ wInput, setWInput, day, logWeight, wStats, markers = [], addMarker, removeMarker, goals, updateGoals, theme, toggleTheme, showGuide, toggleGuide, getQuickBackup, getArchiveBackup, importData, userEmail, onSignOut }) {
   const fileRef = useRef(null);
+  const [markerLabel, setMarkerLabel] = useState('');
+  const [markerDate,  setMarkerDate]  = useState(day);
+  const submitMarker = () => {
+    if (!markerLabel.trim() || !markerDate) return;
+    addMarker(markerDate, markerLabel);
+    setMarkerLabel('');
+  };
+  const fmtMarkerDate = (d) => {
+    try { return new Date(d + 'T12:00:00').toLocaleDateString('en-AU', { day:'numeric', month:'short', year:'numeric' }); }
+    catch { return d; }
+  };
   const [importStatus, setImportStatus] = useState(null); // 'ok' | 'err' | 'quick' | 'archive'
   const dayLabel = (() => {
     try { return new Date(day + 'T12:00:00').toLocaleDateString('en-AU', { weekday:'long', month:'short', day:'numeric' }); }
@@ -112,6 +123,42 @@ export function SettingsTab({ wInput, setWInput, day, logWeight, wStats, goals, 
               description="Average weekly rate of change based on all entries" />
           </div>
         )}
+      </div>
+
+      {/* weight-chart markers */}
+      <div style={{ background:T.surface, borderRadius:20, padding:'16px 18px', marginBottom:12, boxShadow:'0 1px 8px rgba(0,0,0,0.06)' }}>
+        <div style={{ ...NF, fontSize:11, letterSpacing:1.5, color:T.gold, fontWeight:700, marginBottom:6 }}>WEIGHT CHART MARKERS</div>
+        <div style={{ fontSize:12, color:T.muted, marginBottom:10 }}>
+          Flag events that shift the scale without changing fat: starting creatine, a new training block, travel.
+        </div>
+        {markers.length > 0 && (
+          <div style={{ marginBottom:10 }}>
+            {markers.map((m, i) => (
+              <div key={`${m.date}:${m.label}`} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 0',
+                borderBottom: i < markers.length - 1 ? `1px solid ${T.border}` : 'none' }}>
+                <div style={{ ...NF, fontSize:12, color:T.muted, width:92, flexShrink:0 }}>{fmtMarkerDate(m.date)}</div>
+                <div style={{ flex:1, fontSize:13, color:T.ink }}>{m.label}</div>
+                <button onClick={() => removeMarker(i)} aria-label={`Remove marker ${m.label}`}
+                  style={{ border:'none', background:'transparent', color:T.faint, cursor:'pointer', padding:4, display:'flex' }}>
+                  <X size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+          <input type="date" value={markerDate} onChange={e => setMarkerDate(e.target.value)}
+            style={{ ...inp, width:150, flexShrink:0 }} />
+          <input value={markerLabel} onChange={e => setMarkerLabel(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && submitMarker()}
+            placeholder="Label" style={{ ...inp, flex:1, minWidth:0 }} />
+          <button onClick={submitMarker} disabled={!markerLabel.trim()}
+            style={{ flexShrink:0, padding:'12px 14px', borderRadius:12, border:'none',
+              background: markerLabel.trim() ? T.accent : T.border, color:'#fff', fontSize:14, fontWeight:600,
+              cursor: markerLabel.trim() ? 'pointer' : 'default', display:'flex', alignItems:'center' }}>
+            <Plus size={16} />
+          </button>
+        </div>
       </div>
 
       {/* goals & focus */}

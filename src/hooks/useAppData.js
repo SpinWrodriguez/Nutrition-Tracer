@@ -347,6 +347,18 @@ export function useAppData(userId = null) {
   const updateGoals = (updates) =>
     setData(d => ({ ...d, goals: { ...(d.goals || {}), ...updates } }));
 
+  const markers = data.markers || [];
+  const addMarker = (date, label) => {
+    const l = (label || '').trim();
+    if (!date || !l) return;
+    setData(d => ({
+      ...d,
+      markers: [...(d.markers || []), { date, label: l }].sort((a, b) => a.date.localeCompare(b.date)),
+    }));
+  };
+  const removeMarker = (idx) =>
+    setData(d => ({ ...d, markers: (d.markers || []).filter((_, i) => i !== idx) }));
+
   const saveMeal = (item, photo = null) => {
     const id = String(Date.now() + Math.random());
     const existing = (data.savedMeals || []).find(m => m.kind !== 'ingredient' && m.n.toLowerCase() === item.n.toLowerCase());
@@ -506,6 +518,7 @@ export function useAppData(userId = null) {
     eaten, planned, adh,
     exercise, exerciseK, addExercise, removeExercise, weeklyDeficit,
     weights, wStats, weekData,
+    markers, addMarker, removeMarker,
     wInput, setWInput,
     goals, updateGoals,
     weekStart, weekDates, prevWeek, nextWeek,
