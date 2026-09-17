@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { SLOTS, toArr, one } from '../constants.js';
+import { SLOTS, toArr, one, pickItemMeta } from '../constants.js';
 import {
   searchFatSecret, fetchFatSecretFoodDetail,
   groundedEstimate,
@@ -77,8 +77,7 @@ export function useItemSheet({ sel, day, addItem, replaceItem, setSlotPhoto, sav
       // applied. Restoring both (instead of the already-scaled totals) means editing again
       // always rescales from the same reference amount rather than compounding on the current total.
       const base = o._portionBase || { k:o.k, p:o.p, c:o.c, f:o.f };
-      setDraft({ custom:true, n:o.n, k:base.k, p:base.p, c:base.c, f:base.f,
-        ...(o.analysis ? { analysis: o.analysis } : {}), ...(o.aiChat ? { aiChat: o.aiChat } : {}) });
+      setDraft({ custom:true, n:o.n, k:base.k, p:base.p, c:base.c, f:base.f, ...pickItemMeta(o) });
       setQty(String(o._portion || 1));
     }
   };
@@ -179,7 +178,7 @@ export function useItemSheet({ sel, day, addItem, replaceItem, setSlotPhoto, sav
       n: meal.kind === 'ingredient' && meal.per ? `${meal.n} (${meal.per})` : meal.n,
       ...base,
       _portionBase: base, _portion: 1,
-      ...(meal.analysis ? { analysis: meal.analysis } : {}), ...(meal.aiChat ? { aiChat: meal.aiChat } : {}),
+      ...pickItemMeta(meal),
     };
     confirmItem(open, final, meal.photo || null);
   };

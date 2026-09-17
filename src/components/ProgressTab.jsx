@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, ReferenceLine, CartesianGrid,
   LineChart, Line,
 } from 'recharts';
-import { T, NF } from '../constants.js';
+import { T, NF, localDateISO, shiftISO } from '../constants.js';
 
 function AvgRow({ label, value, goal, unit, over }) {
   const pct   = goal ? Math.min(100, Math.round((value / goal) * 100)) : null;
@@ -23,21 +23,34 @@ function AvgRow({ label, value, goal, unit, over }) {
   );
 }
 
-export function ProgressTab({ weeklyNutrition, weeklyAvg, wStats, weekData, allWeights, markers = [], streak, goals, onAiSummary, onAiPlan }) {
+export function ProgressTab({ weeklyNutrition, weeklyAvg, wStats, weekData, allWeights, markers = [], splitAvg, streak, goals, onAiSummary, onAiPlan }) {
   const isProtein = goals.focus === 'protein';
   const [weightFilter, setWeightFilter] = useState('week');
 
+  // Trailing 7-day average for every logged date — the line to read the trend from.
+  // Daily readings swing ±0.5 kg with water; the average is what the fat trend actually looks like.
+  const avg7ByDate = (() => {
+    const w = allWeights || [];
+    const map = {};
+    w.forEach((e, i) => {
+      const from = shiftISO(e.date, -6);
+      let s = 0, n = 0;
+      for (let j = i; j >= 0 && w[j].date >= from; j--) { s += w[j].kg; n++; }
+      map[e.date] = +(s / n).toFixed(2);
+    });
+    return map;
+  })();
+
   const weightChartData = (() => {
-    if (weightFilter === 'week') return weekData;
+    if (weightFilter === 'week') return weekData.map(d => ({ ...d, avg7: d.kg != null ? avg7ByDate[d.date] ?? null : null }));
     const weights = allWeights || [];
     if (weightFilter === 'month') {
-      const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);
-      const cutoffStr = cutoff.toISOString().slice(0, 10);
+      const cutoffStr = shiftISO(localDateISO(), -30); // local calendar date, never UTC
       return weights
         .filter(w => w.date >= cutoffStr)
         .map(w => {
           const d = new Date(w.date + 'T12:00:00');
-          return { day: d.toLocaleDateString('en-US', { month:'short', day:'numeric' }), date: w.date, kg: w.kg };
+          return { day: d.toLocaleDateString('en-US', { month:'short', day:'numeric' }), date: w.date, kg: w.kg, avg7: avg7ByDate[w.date] };
         });
     }
     // 'all' — group by month, average kg
@@ -143,7 +156,31 @@ export function ProgressTab({ weeklyNutrition, weeklyAvg, wStats, weekData, allW
             )}
             <AvgRow label="Carbs" value={weeklyAvg.c} goal={goals.carbs} unit="g" over={true}  />
             <AvgRow label="Fat"   value={weeklyAvg.f} goal={goals.fat}   unit="g" over={true}  />
+            {weeklyAvg.kPlusMinus > 0 && (
+              <div style={{ fontSize:11, color:T.gold, marginTop:4 }}>
+                ±{weeklyAvg.kPlusMinus} kcal/day uncertainty from {weeklyAvg.estItems} eyeballed meal{weeklyAvg.estItems === 1 ? '' : 's'} this week. Weighed meals are within a few percent.
+              </div>
+            )}
           </>
+        )}
+        {splitAvg && (splitAvg.weekday != null || splitAvg.weekend != null) && (
+          <div style={{ display:'flex', gap:8, marginTop:12, paddingTop:10, borderTop:`1px dashed ${T.border}` }}>
+            {[
+              { label:'Weekdays', v: splitAvg.weekday, n: splitAvg.weekdayDays },
+              { label:'Weekends', v: splitAvg.weekend, n: splitAvg.weekendDays },
+            ].map(({ label, v, n }) => {
+              const other = label === 'Weekdays' ? splitAvg.weekend : splitAvg.weekday;
+              const hot = v != null && other != null && v > other + 150;
+              return (
+                <div key={label} style={{ flex:1, background:T.bg, borderRadius:10, padding:'8px 10px' }}>
+                  <div style={{ fontSize:10, color:T.muted, letterSpacing:0.5, textTransform:'uppercase' }}>{label} · last 4 wks</div>
+                  <div style={{ ...NF, fontSize:18, fontWeight:700, color: hot ? T.over : T.ink, lineHeight:1.2 }}>
+                    {v == null ? '—' : v.toLocaleString()} <span style={{ fontSize:11, color:T.faint, fontWeight:400 }}>kcal · {n} day{n === 1 ? '' : 's'}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 
@@ -183,6 +220,21 @@ export function ProgressTab({ weeklyNutrition, weeklyAvg, wStats, weekData, allW
             ))}
           </div>
         </div>
+        {hasWeight && wStats && (
+          <div style={{ display:'flex', alignItems:'center', gap:12, paddingLeft:18, paddingRight:12, marginBottom:6, fontSize:11, color:T.muted, flexWrap:'wrap' }}>
+            {weightFilter !== 'all' && (
+              <>
+                <span style={{ display:'flex', alignItems:'center', gap:4 }}><span style={{ width:14, height:3, background:T.accent, borderRadius:2, display:'inline-block' }} /> 7-day avg{wStats.avg7 != null ? ` ${wStats.avg7.toFixed(1)} kg` : ''}</span>
+                <span style={{ display:'flex', alignItems:'center', gap:4 }}><span style={{ width:6, height:6, background:T.faint, borderRadius:'50%', display:'inline-block' }} /> daily</span>
+              </>
+            )}
+            {wStats.recentPerWk != null && (
+              <span style={{ marginLeft:'auto', ...NF, fontWeight:700, color: wStats.recentPerWk < 0 ? T.ok : wStats.recentPerWk > 0 ? T.over : T.muted }}>
+                {wStats.recentPerWk > 0 ? '+' : ''}{wStats.recentPerWk.toFixed(2)} kg/wk <span style={{ fontWeight:400, color:T.faint }}>last 4 wks</span>
+              </span>
+            )}
+          </div>
+        )}
         {!hasWeight ? (
           <p style={{ padding:'20px 18px', textAlign:'center', color:T.faint, fontSize:13 }}>
             Log your weight in Settings to build the trend.
@@ -195,13 +247,22 @@ export function ProgressTab({ weeklyNutrition, weeklyAvg, wStats, weekData, allW
                 <XAxis dataKey="day" tick={{ fontSize:10, fill:T.muted }} axisLine={{ stroke:T.border }} tickLine={false} />
                 <YAxis domain={['auto','auto']} tick={{ fontSize:10, fill:T.muted }} axisLine={false} tickLine={false} width={32} />
                 <Tooltip contentStyle={{ borderRadius:10, border:`1px solid ${T.border}`, fontSize:12 }}
-                  formatter={v => v === null ? ['—','Weight'] : [`${v} kg`,'Weight']} />
+                  formatter={(v, name) => v == null ? ['—', name === 'avg7' ? '7-day avg' : 'Weight'] : [`${v} kg`, name === 'avg7' ? '7-day avg' : 'Weight']} />
                 {markerLines.map(m => (
                   <ReferenceLine key={m.key} x={m.x} stroke={T.gold} strokeDasharray="3 3" strokeWidth={1.5}
                     label={{ value: m.label, position:'insideTopLeft', fontSize:9, fill:T.gold, fontWeight:600 }} />
                 ))}
-                <Line type="monotone" dataKey="kg" stroke={T.accent} strokeWidth={2.5}
-                  dot={{ r:3, fill:T.accent }} activeDot={{ r:5 }} connectNulls={false} />
+                {weightFilter === 'all' ? (
+                  <Line type="monotone" dataKey="kg" stroke={T.accent} strokeWidth={2.5}
+                    dot={{ r:3, fill:T.accent }} activeDot={{ r:5 }} connectNulls={false} />
+                ) : (
+                  <>
+                    <Line type="monotone" dataKey="kg" stroke={T.faint} strokeWidth={1.5}
+                      dot={{ r:2.5, fill:T.faint, strokeWidth:0 }} activeDot={{ r:4 }} connectNulls={false} />
+                    <Line type="monotone" dataKey="avg7" stroke={T.accent} strokeWidth={2.5}
+                      dot={false} activeDot={{ r:5 }} connectNulls />
+                  </>
+                )}
               </LineChart>
             </ResponsiveContainer>
           </div>

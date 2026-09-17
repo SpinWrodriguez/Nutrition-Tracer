@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, X, ChevronDown } from 'lucide-react';
-import { T, NF } from '../constants.js';
+import { T, NF, EXERCISE_PRESETS } from '../constants.js';
 
 function Fold({ title, sub, children }) {
   const [open, setOpen] = useState(true);
@@ -21,7 +21,8 @@ function Fold({ title, sub, children }) {
 }
 
 export function GuideTab({ wStats, goals, updateGoals, dayName, isToday,
-  eaten, exercise, exerciseK, addExercise, removeExercise, weeklyDeficit }) {
+  eaten, exercise, exerciseK, addExercise, removeExercise, weeklyDeficit, calibration }) {
+  const [calWin, setCalWin] = useState('w4');
   const [deficit, setDeficit] = useState(300);
   const [curWt,   setCurWt]   = useState('');
   const [goalWt,  setGoalWt]  = useState('80');
@@ -114,6 +115,52 @@ export function GuideTab({ wStats, goals, updateGoals, dayName, isToday,
             <span>kcal</span>
           </div>
 
+          {/* calibrated maintenance — what your intake, exercise and scale actually imply */}
+          {calibration && (() => {
+            const cal = calibration[calWin];
+            const any = calibration.w4 || calibration.w8 || calibration.w12;
+            if (!any) return null;
+            const diff = cal ? cal.maint - maint : null;
+            return (
+              <div style={{ marginTop:14, background:T.bg, borderRadius:12, padding:'12px 12px' }}>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+                  <div style={{ ...NF, fontSize:10, color:T.accent, letterSpacing:1 }}>CALIBRATED MAINTENANCE</div>
+                  <div style={{ display:'flex', gap:4 }}>
+                    {[['w4','4 wk'],['w8','8 wk'],['w12','12 wk']].map(([k, l]) => (
+                      <button key={k} onClick={() => setCalWin(k)} disabled={!calibration[k]}
+                        style={{ padding:'2px 8px', borderRadius:20, fontSize:10, fontWeight:600, cursor: calibration[k] ? 'pointer' : 'default',
+                          border:`1px solid ${calWin === k ? T.accent : T.border}`,
+                          background: calWin === k ? T.accentLight : 'transparent',
+                          color: !calibration[k] ? T.faint : calWin === k ? T.accent : T.muted }}>{l}</button>
+                    ))}
+                  </div>
+                </div>
+                {!cal ? (
+                  <div style={{ fontSize:12, color:T.muted }}>Not enough logged days and weigh-ins in this window yet.</div>
+                ) : (
+                  <>
+                    <div style={{ display:'flex', alignItems:'baseline', gap:8, flexWrap:'wrap' }}>
+                      <span style={{ ...NF, fontSize:26, fontWeight:700, color:T.ink, lineHeight:1 }}>{cal.maint.toLocaleString()}</span>
+                      <span style={{ fontSize:12, color:T.muted }}>kcal/day implied</span>
+                      {diff != null && Math.abs(diff) >= 50 && (
+                        <span style={{ ...NF, fontSize:12, fontWeight:700, color: diff < 0 ? T.over : T.ok }}>{diff > 0 ? '+' : ''}{diff} vs setting</span>
+                      )}
+                      {diff != null && Math.abs(diff) >= 50 && (
+                        <button onClick={() => updateGoals({ maintenance: cal.maint })}
+                          style={{ marginLeft:'auto', padding:'5px 10px', borderRadius:8, border:'none', background:T.accent, color:'#fff',
+                            fontSize:11, fontWeight:700, cursor:'pointer' }}>Apply</button>
+                      )}
+                    </div>
+                    <div style={{ fontSize:11, color:T.muted, marginTop:6, lineHeight:1.5 }}>
+                      {cal.days} logged days, avg {cal.avgEaten.toLocaleString()} eaten, {cal.avgEx} exercise; 7-day-avg weight moved {cal.deltaKg > 0 ? '+' : ''}{cal.deltaKg} kg.
+                      Water shifts (creatine, a new training block, a salty weekend at the end) distort this. Prefer the longest window that doesn't span one.
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })()}
+
           {/* exercise log */}
           <div style={{ marginTop:16, paddingTop:14, borderTop:`1px dashed ${T.border}` }}>
             <div style={{ ...NF, fontSize:10, color:T.accent, letterSpacing:1, marginBottom:8 }}>EXERCISE LOG</div>
@@ -128,7 +175,18 @@ export function GuideTab({ wStats, goals, updateGoals, dayName, isToday,
                 <span style={{ ...NF, fontSize:14, fontWeight:700, color:T.accent }}>−{(+e.k || 0).toLocaleString()} kcal</span>
               </div>
             ))}
-            <div style={{ display:'flex', gap:6, marginTop: exercise.length ? 10 : 0 }}>
+            {/* presets fill the inputs so the kcal can still be adjusted before adding */}
+            <div style={{ display:'flex', gap:6, overflowX:'auto', paddingBottom:4, marginTop: exercise.length ? 10 : 0, scrollbarWidth:'none' }}>
+              {EXERCISE_PRESETS.map(p => (
+                <button key={p.n} onClick={() => { setExName(p.n); setExKcal(String(p.k)); }}
+                  style={{ flexShrink:0, padding:'5px 10px', borderRadius:20, border:`1px solid ${exName === p.n ? T.accent : T.border}`,
+                    background: exName === p.n ? T.accentLight : 'transparent', color: exName === p.n ? T.accent : T.muted,
+                    fontSize:11, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap' }}>
+                  {p.n} · {p.k}
+                </button>
+              ))}
+            </div>
+            <div style={{ display:'flex', gap:6, marginTop:6 }}>
               <input value={exName} onChange={e => setExName(e.target.value)} placeholder="Golf, gym session…"
                 onKeyDown={e => { if (e.key === 'Enter') submitExercise(); }}
                 style={{ flex:1, minWidth:0, fontSize:14, color:T.ink, background:T.bg,

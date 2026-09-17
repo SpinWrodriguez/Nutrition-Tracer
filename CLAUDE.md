@@ -23,7 +23,7 @@ Repo: GitHub Pages deployment via `.github/workflows/deploy.yml`
 ## Architecture
 
 ### Data storage (two-layer)
-Text data (meals, checks, weights, goals, savedMeals, exercise, markers):
+Text data (meals, checks, weights, waist, goals, savedMeals, exercise, markers):
 - Written to `localStorage` key `nt-v2` on every change
 - Debounced 2s upsert to Supabase `nutrition_data` table (JSONB column `data`, keyed by `userId`)
 
@@ -42,7 +42,7 @@ Photos (meal slot photos + saved meal photos):
 ### State
 - `useAppData(userId)` — the single source of truth, lives in `App.jsx`
 - Selections keyed by ISO date string (e.g. `2026-06-22`) not day-id — **critical** after old format migration
-- `localDateISO()` used everywhere for current date — **never** `new Date().toISOString()` (would give UTC date, wrong for Australian users early morning)
+- `localDateISO()` used everywhere for current date — **never** `new Date().toISOString()` (would give UTC date, wrong for Australian users early morning). Date arithmetic goes through `shiftISO(iso, n)` / `dateToLocalISO(d)` for the same reason.
 
 ---
 
@@ -68,6 +68,7 @@ Photos (meal slot photos + saved meal photos):
 | `src/components/AnalyzeSheet.jsx` | Photo nutrition analysis sheet |
 | `src/components/ui.jsx` | Shared components: `StatCard`, `MacroGauge`, `NavBtn` |
 | `src/api.js` | OpenAI (GPT-4o-mini) for nutrition lookup + photo analysis + AI chat; FatSecret search via proxy |
+| `src/hooks/useUpdateCheck.js` | Polls `version.json` (emitted by the Vite plugin in `vite.config.js`, stamped with `__BUILD_ID__`) on focus/visibility; App shows an "Update available" toast when a newer deploy is live. There is no service worker, so this is the only update signal |
 | `server/fatsecret-proxy.js` | Node.js HTTP server — proxies FatSecret API calls, handles OAuth token, serves `/api/fatsecret/search` and `/api/fatsecret/food` |
 | `src/db.js` | IndexedDB wrapper — `photoSet`, `photoDel`, `photoClear`, `photoGetAll` |
 | `src/storage.js` | Supabase Storage wrapper — `storageUpload`, `storageDelete`, `storageSync`, `storageUploadAll` |
@@ -97,10 +98,11 @@ Each slot holds an array of items. Items can be:
 `one(v)` resolves either form to `{ n, k, p, c, f }`.
 `sumSlot(items)` returns totals `{ k, p, c, f }`.
 
-AI-analyzed items (and saved meals) also carry `analysis` (last AI reply text) and `aiChat` (`[{ role, text }]` full conversation). Tapping an item/meal name that has `analysis` reopens AnalyzeSheet in continue mode (seeded with `aiChat` history + the slot/meal photo) so the conversation can resume; confirming updates the item in place. **Gotcha:** any code that rebuilds an item from its fields (edit sheet drafts, save-to-library, add-from-library) must copy `analysis` and `aiChat` through, or the history is silently lost.
+AI-analyzed items (and saved meals) also carry `analysis` (last AI reply text), `aiChat` (`[{ role, text }]` full conversation), `conf` (`'weighed' | 'labelled' | 'estimated'` — how the portions were determined) and `basis` (`'cooked' | 'raw' | 'labelled' | 'mixed'`). `aiAnalyzeFood` returns `confidence`/`basis` in its JSON; AnalyzeSheet shows them as chips and stamps them on the item. MealCard shows an `EST` tag for `conf:'estimated'`; `weeklyAvg.kPlusMinus` treats those items as ±25% and Progress surfaces it. Tapping an item/meal name that has `analysis` reopens AnalyzeSheet in continue mode (seeded with `aiChat` history + the slot/meal photo) so the conversation can resume; confirming updates the item in place. **Gotcha:** any code that rebuilds an item from its fields (edit sheet drafts, save-to-library, add-from-library) must copy these through — use `pickItemMeta(item)` (keys in `ITEM_META_KEYS`), or the history and tags are silently lost.
 
 ## Ingredient library
 Ingredients are `savedMeals` entries with `kind: 'ingredient'` and `per` (free-form basis string, e.g. `"60 g"`, `"1 slice (22 g)"`); macros are for exactly that amount. They render in their own section of the Saved tab (same card/features as meals) and are added to slots as one serving named `"Arepa (60 g)"`.
+- **Basis validation**: `parseBasis(per)` requires `<number> <unit…>`; the add/edit sheet blocks saving an ingredient otherwise, and offers "Make it per 1 <unit>" (divides macros) when a countable unit has n > 1 (e.g. "2 slices"). Mass/volume units (g, ml, cup…) are never normalised. Saved tab flags entries that fail either check.
 - **Manual only**: ingredients are added/edited by the user in the Saved tab (Add ingredient button → same add sheet with an extra `per` input). There is deliberately NO auto-learning from AI analyses — it was built and removed (2026-07-17) because the model renamed components, creating duplicate entries; don't reintroduce without solving name matching.
 - **AI injection**: `aiAnalyzeFood(messages, learned)` gets the library as priority tier 3 in its system prompt; `aiDayChat` gets it via `ctx.ingredients`. `groundedEstimate` deliberately does NOT.
 - **Kind-scoped filters (gotcha)**: name lookups over savedMeals must exclude ingredients where meal semantics are meant — star toggle (`savedMealNames` in App.jsx, `saveMeal` in useAppData), `applyWeekPlan`/`applyDayPlan`, `syncPhotoToMealLib`, and the savedMeals list passed to `aiGenerateDayPlan`.
@@ -112,9 +114,12 @@ Ingredients are `savedMeals` entries with `kind: 'ingredient'` and `per` (free-f
 - `removeItem(slotKey, idx)` — removes item by index
 - `replaceItem(slotKey, idx, item)` — replaces item (edit)
 - `toggleCheck(slotKey)` — marks slot eaten/uneaten
-- `logWeight(kg)` — adds weight entry for current day
+- `logWeight(kg)` — adds weight entry for current day. `wStats` also exposes `avg7` (trailing 7-day mean) and `recentPerWk` (4-week rate from 7-day-averaged endpoints, null until there is enough data). Progress draws daily weights faint and the 7-day average bold.
+- `logWaist(cm)` — `data.waist` = `[{ date, cm }]`; `waistStats` gives current, overall and 4-week change. Logged from Settings under the weight input.
+- `splitAvg` — weekday vs weekend average kcal over the last 28 logged days (Progress weekly-averages card).
+- `calibration` — `{ w4, w8, w12 }` implied maintenance from Σeaten − Σexercise − Δkg×7700 over each window (Δkg from 7-day-averaged weight); null when <14 logged days or too few weigh-ins. Coach tab shows it with an Apply button that sets `goals.maintenance`.
 - `addMarker(date, label)` / `removeMarker(idx)` — `data.markers` = `[{ date, label }]`, drawn as labelled dashed vertical lines on the Progress weight chart (week/month: first point on or after the date; all: the month's point). Managed in Settings → "Weight chart markers". `normalizeData` seeds `[{ 2026-08-31, "Creatine start" }]` once when the field is absent; an empty array is preserved (never re-seeded).
-- `addExercise(name, kcal)` / `removeExercise(idx)` — exercise log for current day (`data.exercise[date]` = `[{ n, k }]`). Powers the deficit display in GuideTab: deficit = `goals.maintenance` (default 2200) + exercise − eaten. **Deficit-display model** — exercise never raises the eating target or macros, it only deepens the shown deficit. `weeklyDeficit` memo rolls it up across logged days of the week.
+- `addExercise(name, kcal)` / `removeExercise(idx)` — exercise log for current day. `EXERCISE_PRESETS` in constants.js are chips in the Coach tab that prefill the inputs (Golf 18 holes walking = 1000, etc.). (`data.exercise[date]` = `[{ n, k }]`). Powers the deficit display in GuideTab: deficit = `goals.maintenance` (default 2200) + exercise − eaten. **Deficit-display model** — exercise never raises the eating target or macros, it only deepens the shown deficit. `weeklyDeficit` memo rolls it up across logged days of the week.
 - `saveMeal(item, photo?)` — saves to savedMeals library
 - `removeSavedMeal(id)` — removes from library
 - `setSlotPhoto(slotKey, base64)` — sets photo for current day slot
@@ -158,6 +163,7 @@ PORT                    = 3000
 
 ### Frontend (GitHub Pages)
 Push to `main` → GitHub Actions builds (`npm run build`) → deploys to GitHub Pages.
+Build emits `version.json` and stamps `__BUILD_ID__`; `recharts` is split into its own chunk and ProgressTab/GuideTab/AiChat are `React.lazy`, so the initial bundle stays ~340 kB.
 Workflow: `.github/workflows/deploy.yml` — injects all `VITE_*` secrets at build time.
 
 ### FatSecret Proxy (Oracle Cloud VM)

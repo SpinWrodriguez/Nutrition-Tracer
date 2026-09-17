@@ -67,10 +67,42 @@ export const DAYS = [
 
 /* ── helpers ── */
 // Use local calendar date (not UTC) so Australian users don't get "yesterday"
-export const localDateISO = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-};
+export const dateToLocalISO = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+export const localDateISO = () => dateToLocalISO(new Date());
+// ISO date `n` days before/after an ISO date (local calendar, noon-anchored so DST can't shift the day)
+export const shiftISO = (iso, n) => { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return dateToLocalISO(d); };
+export const isWeekendISO = iso => { const dow = new Date(iso + 'T12:00:00').getDay(); return dow === 0 || dow === 6; };
+
+/* ── item metadata that must survive any rebuild of an item from its fields ──
+   analysis/aiChat: AI conversation; conf: 'weighed'|'labelled'|'estimated'; basis: 'cooked'|'raw'|'labelled'|'mixed' */
+export const ITEM_META_KEYS = ['analysis', 'aiChat', 'conf', 'basis'];
+export const pickItemMeta = o => ITEM_META_KEYS.reduce((a, k) => (o?.[k] != null ? { ...a, [k]: o[k] } : a), {});
+
+/* ── ingredient basis ("per") parsing ──
+   Valid: "<number> <unit…>" e.g. "60 g", "1 slice (22 g)", "400 ml bottle", "1 sachet".
+   countLike: unit is a countable thing (slice, piece, bar…) rather than a mass/volume, so
+   a basis of "2 slices" can be normalised to "1 slice" by dividing the macros. */
+const MASS_UNITS = /^(g|gr|gram|grams|kg|ml|l|litre|liter|oz|cup|cups|tbsp|tsp)\b/i;
+export function parseBasis(per) {
+  const s = String(per || '').trim();
+  const m = s.match(/^(\d+(?:[.,]\d+)?)\s*([a-zA-Z][\w\s()./-]*)$/);
+  if (!m) return { ok: false, n: null, unit: '', countLike: false, raw: s };
+  const n = parseFloat(m[1].replace(',', '.'));
+  const unit = m[2].trim();
+  return { ok: n > 0 && unit.length > 0, n, unit, countLike: !MASS_UNITS.test(unit), raw: s };
+}
+export const singularUnit = u => u.replace(/^([a-zA-Z]+?)s\b/, '$1'); // slices → slice, bars → bar
+
+/* ── exercise presets (Coach tab) — net kcal above resting for an ~82 kg adult ── */
+export const EXERCISE_PRESETS = [
+  { n: 'Golf 18 holes (walking)', k: 1000 },
+  { n: 'Golf 9 holes (walking)',  k: 500  },
+  { n: 'Driving range',           k: 150  },
+  { n: 'Gym session',             k: 200  },
+  { n: 'Gardening (1 hr)',        k: 250  },
+  { n: 'Walk 30 min',             k: 150  },
+];
 export const toArr    = v => Array.isArray(v) ? v : (v ? [v] : []);
 export const one      = v => typeof v === 'string' ? (OPT[v] ? { ...OPT[v] } : null) : v;
 export const sumSlot  = items => toArr(items).reduce((a, v) => {

@@ -1,6 +1,9 @@
 import { useRef, useState, useEffect } from 'react';
 import { Camera, Send, Plus, X, ImagePlus } from 'lucide-react';
-import { T, NF, inp } from '../constants.js';
+import { T, NF, inp, pickItemMeta } from '../constants.js';
+
+const CONF_LABEL  = { weighed: 'Weighed', labelled: 'From label', estimated: 'Estimated by eye' };
+const BASIS_LABEL = { cooked: 'cooked weight', raw: 'raw weight', labelled: 'as labelled', mixed: 'mixed basis' };
 import { aiAnalyzeFood, compressImage } from '../api.js';
 
 export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm, initial = null, confirmLabel = null, learnedLibrary = [] }) {
@@ -8,6 +11,7 @@ export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm, initial = nul
   const [displayMsgs, setDisplayMsgs] = useState([]);
   const [apiMsgs,     setApiMsgs]     = useState([]);
   const [macros,      setMacros]      = useState(null);
+  const [estMeta,     setEstMeta]     = useState(null); // { conf, basis } from the last AI reply
   const [bestPhotoIdx, setBestPhotoIdx] = useState(-1);
   const [photosSent,  setPhotosSent]  = useState(false);
   const [input,       setInput]       = useState('');
@@ -28,6 +32,7 @@ export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm, initial = nul
         k: String(initial.macros.k ?? 0), p: String(initial.macros.p ?? 0),
         c: String(initial.macros.c ?? 0), f: String(initial.macros.f ?? 0),
       } : null);
+      setEstMeta(initial?.macros?.conf ? { conf: initial.macros.conf, basis: initial.macros.basis } : null);
       setInput(''); setErr(null); setBusy(false); setBestPhotoIdx(-1);
       setPhotosSent(false); // seeded photos are re-sent on the next message so the AI can see them
     }
@@ -62,6 +67,7 @@ export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm, initial = nul
 
       setDisplayMsgs(prev => [...prev, { role: 'assistant', text: replyText }]);
       setMacros({ n: result.name || '', k: String(result.k ?? 0), p: String(result.p ?? 0), c: String(result.c ?? 0), f: String(result.f ?? 0) });
+      if (CONF_LABEL[result.confidence]) setEstMeta({ conf: result.confidence, basis: BASIS_LABEL[result.basis] ? result.basis : undefined });
       if (attachPhotos && result.photo_index >= 0) setBestPhotoIdx(result.photo_index);
       if (attachPhotos) setPhotosSent(true);
       setApiMsgs([...nextApiMsgs, { role: 'assistant', content: JSON.stringify(result) }]);
@@ -94,6 +100,7 @@ export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm, initial = nul
       p: Math.max(0, Math.round(+macros.p || 0)),
       c: Math.max(0, Math.round(+macros.c || 0)),
       f: Math.max(0, Math.round(+macros.f || 0)),
+      ...(estMeta ? pickItemMeta(estMeta) : {}),
     };
     const lastReply = [...displayMsgs].reverse().find(m => m.role === 'assistant');
     if (lastReply) item.analysis = lastReply.text;
@@ -203,6 +210,20 @@ export function AnalyzeSheet({ open, slotMeta, onClose, onConfirm, initial = nul
           {/* editable macro row — appears after first estimate */}
           {hasEstimate && (
             <div style={{ marginBottom:10 }}>
+              {estMeta && (
+                <div style={{ display:'flex', gap:6, marginBottom:8, flexWrap:'wrap' }}>
+                  <span style={{ fontSize:10, fontWeight:700, letterSpacing:0.5, padding:'3px 8px', borderRadius:99,
+                    background: estMeta.conf === 'estimated' ? T.goldLight : T.accentLight,
+                    color: estMeta.conf === 'estimated' ? T.gold : T.accent }}>
+                    {CONF_LABEL[estMeta.conf].toUpperCase()}
+                  </span>
+                  {estMeta.basis && (
+                    <span style={{ fontSize:10, fontWeight:600, padding:'3px 8px', borderRadius:99, background:T.bg, color:T.muted }}>
+                      {BASIS_LABEL[estMeta.basis]}
+                    </span>
+                  )}
+                </div>
+              )}
               <input value={macros.n} onChange={e => setMacros(m => ({ ...m, n: e.target.value }))}
                 placeholder="Food name"
                 style={{ ...inp, fontWeight:700, fontSize:14, marginBottom:8 }} />
