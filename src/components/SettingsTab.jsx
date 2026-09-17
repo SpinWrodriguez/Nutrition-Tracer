@@ -1,9 +1,9 @@
 import { useRef, useState } from 'react';
 import { Plus, X, Download, Upload, CheckCircle, AlertCircle, LogOut } from 'lucide-react';
-import { T, NF, inp } from '../constants.js';
+import { T, NF, inp, localDateISO } from '../constants.js';
 import { StatCard } from './ui.jsx';
 
-export function SettingsTab({ wInput, setWInput, day, logWeight, wStats, markers = [], addMarker, removeMarker, goals, updateGoals, theme, toggleTheme, showGuide, toggleGuide, getQuickBackup, getArchiveBackup, importData, userEmail, onSignOut }) {
+export function SettingsTab({ wInput, setWInput, day, logWeight, wStats, waistInput, setWaistInput, logWaist, waistStats, markers = [], addMarker, removeMarker, goals, updateGoals, theme, toggleTheme, showGuide, toggleGuide, getQuickBackup, getArchiveBackup, importData, userEmail, onSignOut }) {
   const fileRef = useRef(null);
   const [markerLabel, setMarkerLabel] = useState('');
   const [markerDate,  setMarkerDate]  = useState(day);
@@ -22,7 +22,7 @@ export function SettingsTab({ wInput, setWInput, day, logWeight, wStats, markers
     catch { return day; }
   })();
 
-  const dateStr = new Date().toISOString().slice(0, 10);
+  const dateStr = localDateISO(); // local calendar date for the backup filename, never UTC
 
   const handleQuickBackup = () => {
     try {
@@ -108,21 +108,52 @@ export function SettingsTab({ wInput, setWInput, day, logWeight, wStats, markers
             <Plus size={16} /> Log
           </button>
         </div>
-        {wStats && (
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginTop:10 }}>
-            <StatCard label="Current" value={wStats.current.toFixed(1)} unit="kg"
-              description="Your most recent weigh-in" />
-            <StatCard label="Change"
-              value={wStats.change === null ? '—' : `${wStats.change > 0 ? '+' : ''}${wStats.change.toFixed(1)}`}
-              unit="kg"
-              color={wStats.change === null ? T.muted : wStats.change < 0 ? T.ok : wStats.change > 0 ? T.over : T.ink}
-              description="Total difference between your first and most recent entry" />
-            <StatCard label="Per week" unit="kg"
-              value={wStats.perWk == null ? '—' : `${wStats.perWk > 0 ? '+' : ''}${wStats.perWk.toFixed(2)}`}
-              color={wStats.perWk == null ? T.muted : wStats.perWk < 0 ? T.ok : T.over}
-              description="Average weekly rate of change based on all entries" />
+        {wStats && (() => {
+          const rate = wStats.recentPerWk ?? wStats.perWk;
+          const recent = wStats.recentPerWk != null;
+          return (
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginTop:10 }}>
+              <StatCard label="Current" value={wStats.current.toFixed(1)} unit={wStats.avg7 != null ? `kg · 7d avg ${wStats.avg7.toFixed(1)}` : 'kg'}
+                description="Most recent weigh-in. The 7-day average is the number to judge progress by — daily readings swing with water." />
+              <StatCard label="Change"
+                value={wStats.change === null ? '—' : `${wStats.change > 0 ? '+' : ''}${wStats.change.toFixed(1)}`}
+                unit="kg"
+                color={wStats.change === null ? T.muted : wStats.change < 0 ? T.ok : wStats.change > 0 ? T.over : T.ink}
+                description="Total difference between your first and most recent entry" />
+              <StatCard label={recent ? '4-wk rate' : 'Per week'} unit="kg/wk"
+                value={rate == null ? '—' : `${rate > 0 ? '+' : ''}${rate.toFixed(2)}`}
+                color={rate == null ? T.muted : rate < 0 ? T.ok : rate > 0 ? T.over : T.ink}
+                description={recent
+                  ? 'Weekly rate over the last 4 weeks, from 7-day-averaged weight at each end. Shows a stall or a whoosh that the lifetime rate hides.'
+                  : 'Average weekly rate across all entries (needs 4+ weeks of data for the recent rate)'} />
+            </div>
+          );
+        })()}
+
+        {/* waist — unaffected by creatine / glycogen water, so it keeps moving when the scale stalls */}
+        <div style={{ marginTop:14, paddingTop:12, borderTop:`1px dashed ${T.border}` }}>
+          <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+            <span style={{ fontSize:13, color:T.muted, flexShrink:0 }}>Waist</span>
+            <input value={waistInput} onChange={e => setWaistInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && logWaist()}
+              inputMode="decimal" placeholder={waistStats?.current != null ? `${waistStats.current}` : '92.0'}
+              style={{ ...inp, flex:1, padding:'9px 12px', fontSize:15 }} />
+            <span style={{ color:T.muted, fontSize:13, flexShrink:0 }}>cm</span>
+            <button onClick={logWaist}
+              style={{ flexShrink:0, padding:'9px 14px', borderRadius:10, border:`1.5px solid ${T.accent}`,
+                background:'transparent', color:T.accent, fontSize:13, fontWeight:600, cursor:'pointer' }}>
+              Log
+            </button>
           </div>
-        )}
+          {waistStats && (
+            <div style={{ fontSize:12, color:T.muted, marginTop:8 }}>
+              Latest <b style={{ color:T.ink }}>{waistStats.current} cm</b>
+              {waistStats.change4wk != null && <> · <b style={{ color: waistStats.change4wk < 0 ? T.ok : waistStats.change4wk > 0 ? T.over : T.ink }}>{waistStats.change4wk > 0 ? '+' : ''}{waistStats.change4wk} cm</b> last 4 wks</>}
+              {waistStats.change != null && <> · {waistStats.change > 0 ? '+' : ''}{waistStats.change} cm overall</>}
+              <span style={{ color:T.faint }}> — weekly, same spot at the navel, relaxed.</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* weight-chart markers */}

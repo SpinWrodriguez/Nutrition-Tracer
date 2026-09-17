@@ -1,5 +1,5 @@
 import { Database, Droplets, Plus, X, ScanSearch } from 'lucide-react';
-import { T, NF, inp } from '../constants.js';
+import { T, NF, inp, parseBasis, singularUnit } from '../constants.js';
 
 export function AddItemSheet({ sheet, onOpenAnalyze, forceEditMode = false, ingredientMode = false }) {
   const {
@@ -161,14 +161,42 @@ export function AddItemSheet({ sheet, onOpenAnalyze, forceEditMode = false, ingr
                 placeholder={ingredientMode ? 'Ingredient name' : 'Meal name'} />
 
               {/* per-serving basis — the macros below are for exactly this amount */}
-              {ingredientMode && (
-                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
-                  <span style={{ fontSize:13, color:T.muted, flexShrink:0 }}>per</span>
-                  <input value={draft.per || ''} onChange={e => setDraft(d => ({ ...d, per: e.target.value }))}
-                    placeholder="e.g. 60 g, 1 slice (22 g)"
-                    style={{ ...inp, flex:1, padding:'8px 12px', fontSize:14 }} />
-                </div>
-              )}
+              {ingredientMode && (() => {
+                const b = parseBasis(draft.per);
+                const touched = String(draft.per || '').trim().length > 0;
+                const normalise = () => {
+                  const div = b.n;
+                  setDraft(d => ({ ...d, per: `1 ${singularUnit(b.unit)}`,
+                    k: Math.round((+d.k || 0) / div), p: Math.round((+d.p || 0) / div * 10) / 10,
+                    c: Math.round((+d.c || 0) / div * 10) / 10, f: Math.round((+d.f || 0) / div * 10) / 10 }));
+                };
+                return (
+                  <div style={{ marginBottom:10 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                      <span style={{ fontSize:13, color:T.muted, flexShrink:0 }}>per</span>
+                      <input value={draft.per || ''} onChange={e => setDraft(d => ({ ...d, per: e.target.value }))}
+                        placeholder="e.g. 60 g, 1 slice (22 g)"
+                        style={{ ...inp, flex:1, padding:'8px 12px', fontSize:14,
+                          borderColor: touched && !b.ok ? T.over : T.border }} />
+                    </div>
+                    {!b.ok && (
+                      <div style={{ fontSize:11, color: touched ? T.over : T.muted, marginTop:5 }}>
+                        Basis must be a number and a unit ("60 g", "1 slice", "400 ml"). Macros are for exactly that amount.
+                      </div>
+                    )}
+                    {b.ok && b.countLike && b.n > 1 && (
+                      <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:6, fontSize:11, color:T.gold }}>
+                        <span>Stated per {b.n} {b.unit}. The AI scales best from a single unit.</span>
+                        <button onClick={normalise}
+                          style={{ border:`1px solid ${T.gold}`, background:T.goldLight, color:T.gold, borderRadius:8,
+                            padding:'3px 8px', fontSize:11, fontWeight:700, cursor:'pointer', flexShrink:0 }}>
+                          Make it per 1 {singularUnit(b.unit)}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* macros grid */}
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:8, marginBottom:10 }}>
@@ -198,12 +226,18 @@ export function AddItemSheet({ sheet, onOpenAnalyze, forceEditMode = false, ingr
               </div>
               )}
 
-              <button onClick={confirmDraft}
-                style={{ width:'100%', padding:'13px', borderRadius:12, border:'none',
-                  background:T.ok, color:'#fff', fontSize:14, fontWeight:600, cursor:'pointer',
-                  display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
-                <Plus size={16} /> {editIdx !== null || forceEditMode ? 'Save changes' : `Add to ${slotMeta?.label.toLowerCase()}`}
-              </button>
+              {(() => {
+                const blocked = ingredientMode && !parseBasis(draft.per).ok;
+                return (
+                  <button onClick={confirmDraft} disabled={blocked}
+                    style={{ width:'100%', padding:'13px', borderRadius:12, border:'none',
+                      background: blocked ? T.border : T.ok, color:'#fff', fontSize:14, fontWeight:600,
+                      cursor: blocked ? 'default' : 'pointer',
+                      display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+                    <Plus size={16} /> {editIdx !== null || forceEditMode ? 'Save changes' : `Add to ${slotMeta?.label.toLowerCase()}`}
+                  </button>
+                );
+              })()}
             </div>
           )}
 

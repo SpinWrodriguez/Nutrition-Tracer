@@ -130,6 +130,11 @@ export function MealCard({
                             cursor: o.analysis ? 'pointer' : 'default' }}>
                           {o.n}
                         </span>
+                        {o.conf === 'estimated' && (
+                          <span title="Portion estimated by eye — treat as ±25%"
+                            style={{ fontSize:9, color:T.gold, fontWeight:700, letterSpacing:0.5, marginRight:4,
+                              padding:'1px 5px', borderRadius:99, background:T.goldLight }}>EST</span>
+                        )}
                         {o.custom && <span style={{ fontSize:10, color:T.accentSoft, fontWeight:600, marginRight:2 }}>CUSTOM</span>}
                         <button onClick={() => onEdit(idx)}
                           style={{ width:32, height:32, background:'none', border:'none', cursor:'pointer', flexShrink:0,

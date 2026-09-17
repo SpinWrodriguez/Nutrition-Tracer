@@ -3,7 +3,7 @@ import { SLOTS, toArr } from './constants.js';
 const DEFAULT_GOALS = { kcal: 1800, protein: 150, carbs: 200, fat: 60, focus: 'protein', maintenance: 2200 };
 
 export function freshData() {
-  return { selections: {}, checked: {}, weights: [], savedMeals: [], exercise: {}, goals: { ...DEFAULT_GOALS }, markers: [] };
+  return { selections: {}, checked: {}, weights: [], waist: [], savedMeals: [], exercise: {}, goals: { ...DEFAULT_GOALS }, markers: [] };
 }
 
 export function normalizeData(raw) {
@@ -17,6 +17,7 @@ export function normalizeData(raw) {
   });
 
   d.weights    = raw.weights || [];
+  d.waist      = Array.isArray(raw.waist) ? raw.waist : [];   // [{ date, cm }]
   d.exercise   = raw.exercise || {};
   // Weight-chart markers [{ date, label }]. Existing data without the field is seeded once
   // with the creatine start (2026-08-31) so the water-weight step is annotated; an empty

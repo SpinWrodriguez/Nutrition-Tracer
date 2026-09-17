@@ -1,24 +1,33 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Flame, Dumbbell, TrendingUp, Star, ChevronLeft, ChevronRight, Settings, Compass } from 'lucide-react';
-import { T, NF, sf, SLOTS, toArr, one, sumSlot, isSkipOnly, getDayMeta, localDateISO } from './constants.js';
+import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
+import { Flame, Dumbbell, TrendingUp, Star, ChevronLeft, ChevronRight, Settings, Compass, RefreshCw } from 'lucide-react';
+import { T, NF, sf, SLOTS, toArr, one, sumSlot, isSkipOnly, getDayMeta, localDateISO, pickItemMeta } from './constants.js';
 import { useAppData } from './hooks/useAppData.js';
 import { useAuth } from './hooks/useAuth.js';
 import { LoginScreen } from './components/LoginScreen.jsx';
 import { useItemSheet } from './hooks/useItemSheet.js';
 import { MacroGauge, NavBtn } from './components/ui.jsx';
 import { MealCard } from './components/MealCard.jsx';
-import { AiChat } from './components/AiChat.jsx';
 import { AddItemSheet } from './components/AddItemSheet.jsx';
 import { AnalyzeSheet } from './components/AnalyzeSheet.jsx';
-import { ProgressTab } from './components/ProgressTab.jsx';
 import { SettingsTab } from './components/SettingsTab.jsx';
 import { SavedMealsTab } from './components/SavedMealsTab.jsx';
-import { GuideTab } from './components/GuideTab.jsx';
 import { aiWeeklySummary, aiGenerateDayPlan, compressImage } from './api.js';
+import { useUpdateCheck } from './hooks/useUpdateCheck.js';
+
+// Heavy, not-on-first-paint tabs load on demand: Progress pulls in recharts, Coach is mostly long copy,
+// and the AI chat FAB is never needed to see today's plan.
+const ProgressTab = lazy(() => import('./components/ProgressTab.jsx').then(m => ({ default: m.ProgressTab })));
+const GuideTab    = lazy(() => import('./components/GuideTab.jsx').then(m => ({ default: m.GuideTab })));
+const AiChat      = lazy(() => import('./components/AiChat.jsx').then(m => ({ default: m.AiChat })));
+
+const TabFallback = () => (
+  <div style={{ padding:'40px 16px', textAlign:'center', ...NF, fontSize:13, color:T.muted }}>Loading…</div>
+);
 
 export default function App() {
   const { session, loading: authLoading, signIn, signUp, signOut, user } = useAuth();
   const app = useAppData(user?.id ?? null);
+  const { updateAvailable, reload } = useUpdateCheck();
   const sheet = useItemSheet({
     sel:          app.sel,
     day:          app.day,
@@ -281,9 +290,7 @@ export default function App() {
                   onCopy={() => copySlot(s.key)}
                   onPaste={() => pasteToSlot(s.key)}
                   onCancelCopy={() => setClipboard(null)}
-                  onSaveItem={item => app.saveMeal({ n:item.n, k:item.k, p:item.p, c:item.c, f:item.f,
-                    ...(item.analysis ? { analysis: item.analysis } : {}),
-                    ...(item.aiChat ? { aiChat: item.aiChat } : {}) }, photo)}
+                  onSaveItem={item => app.saveMeal({ n:item.n, k:item.k, p:item.p, c:item.c, f:item.f, ...pickItemMeta(item) }, photo)}
                   onViewAnalysis={(item, idx) => setAnalysisCtx({ type:'slot', slotKey: s.key, idx, item })}
                   onUnsaveItem={item => {
                     const saved = app.savedMeals.find(m => m.n.toLowerCase() === item.n.toLowerCase());
@@ -300,18 +307,21 @@ export default function App() {
 
         {/* ── progress tab ── */}
         {tab === 'progress' && (
-          <ProgressTab
-            weeklyNutrition={app.weeklyNutrition}
-            weeklyAvg={app.weeklyAvg}
-            wStats={app.wStats}
-            weekData={app.weekData}
-            allWeights={app.weights}
-            markers={app.markers}
-            streak={app.streak}
-            goals={app.goals}
-            onAiSummary={onAiSummary}
-            onAiPlan={onAiPlan}
-          />
+          <Suspense fallback={<TabFallback />}>
+            <ProgressTab
+              weeklyNutrition={app.weeklyNutrition}
+              weeklyAvg={app.weeklyAvg}
+              wStats={app.wStats}
+              weekData={app.weekData}
+              allWeights={app.weights}
+              markers={app.markers}
+              splitAvg={app.splitAvg}
+              streak={app.streak}
+              goals={app.goals}
+              onAiSummary={onAiSummary}
+              onAiPlan={onAiPlan}
+            />
+          </Suspense>
         )}
 
         {/* ── settings tab ── */}
@@ -321,6 +331,7 @@ export default function App() {
             day={app.day}
             logWeight={app.logWeight}
             wStats={app.wStats}
+            waistInput={app.waistInput} setWaistInput={app.setWaistInput} logWaist={app.logWaist} waistStats={app.waistStats}
             markers={app.markers} addMarker={app.addMarker} removeMarker={app.removeMarker}
             goals={app.goals} updateGoals={app.updateGoals}
             theme={theme} toggleTheme={toggleTheme}
@@ -332,19 +343,22 @@ export default function App() {
 
         {/* ── guide tab ── */}
         {tab === 'guide' && (
-          <GuideTab
-            wStats={app.wStats}
-            goals={app.goals}
-            updateGoals={app.updateGoals}
-            dayName={meta.name}
-            isToday={day === todayISO}
-            eaten={eaten}
-            exercise={app.exercise}
-            exerciseK={app.exerciseK}
-            addExercise={app.addExercise}
-            removeExercise={app.removeExercise}
-            weeklyDeficit={app.weeklyDeficit}
-          />
+          <Suspense fallback={<TabFallback />}>
+            <GuideTab
+              wStats={app.wStats}
+              goals={app.goals}
+              updateGoals={app.updateGoals}
+              dayName={meta.name}
+              isToday={day === todayISO}
+              eaten={eaten}
+              exercise={app.exercise}
+              exerciseK={app.exerciseK}
+              addExercise={app.addExercise}
+              removeExercise={app.removeExercise}
+              weeklyDeficit={app.weeklyDeficit}
+              calibration={app.calibration}
+            />
+          </Suspense>
         )}
 
         {/* ── saved meals tab ── */}
@@ -362,7 +376,19 @@ export default function App() {
         )}
       </div>
 
+      {/* ── update toast: a newer deploy is live, reload to get it ── */}
+      {updateAvailable && (
+        <button onClick={reload}
+          style={{ position:'fixed', left:'50%', transform:'translateX(-50%)', bottom:'calc(72px + env(safe-area-inset-bottom))', zIndex:30,
+            display:'flex', alignItems:'center', gap:8, padding:'10px 16px', borderRadius:99, border:'none',
+            background:T.ink, color:'#fff', fontSize:13, fontWeight:600, cursor:'pointer',
+            boxShadow:'0 6px 24px rgba(0,0,0,0.25)', ...sf }}>
+          <RefreshCw size={14} /> Update available · tap to reload
+        </button>
+      )}
+
       {/* ── AI chat FAB ── */}
+      <Suspense fallback={null}>
       <AiChat dayContext={{
         dayName: meta.name,
         goals:   app.goals,
@@ -374,6 +400,7 @@ export default function App() {
           checked: !!chk[s.key],
         })),
       }} />
+      </Suspense>
 
       {/* ── bottom nav ── */}
       <div style={{ position:'fixed', bottom:0, left:0, right:0, zIndex:20,

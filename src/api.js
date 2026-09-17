@@ -496,8 +496,12 @@ The "reply" field must show your full working so the user can verify it. Structu
 - The total calculation ("Total: 553 kcal, 45g P, 45g C, 17g F")
 Keep it concise but complete — 3-6 sentences max.
 
+Also classify the estimate:
+- "basis": which weight basis the numbers rest on — "cooked", "raw" (dry goods weighed uncooked), "labelled" (all from packaging), or "mixed".
+- "confidence": "weighed" if every component's amount came from a scale reading or user-stated grams; "labelled" if it came from nutrition labels with counted servings; "estimated" if ANY component portion was judged by eye from the photo or is a restaurant guess.
+
 ALWAYS respond with valid JSON only — no other text:
-{"reply":"full working as described above","name":"specific food name max 26 chars","k":<kcal int>,"p":<protein g int>,"c":<carbs g int>,"f":<fat g int>,"photo_index":<int>}`;
+{"reply":"full working as described above","name":"specific food name max 26 chars","k":<kcal int>,"p":<protein g int>,"c":<carbs g int>,"f":<fat g int>,"photo_index":<int>,"basis":"cooked"|"raw"|"labelled"|"mixed","confidence":"weighed"|"labelled"|"estimated"}`;
 
   const libBlock = learned.length
     ? '\n\nSAVED INGREDIENT LIBRARY (personal ground truth — see priority 3):\n' +

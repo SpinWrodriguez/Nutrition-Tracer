@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { X, Wand2, ImagePlus, Pencil, Plus, Search } from 'lucide-react';
-import { T, NF, sf, inp, SLOTS } from '../constants.js';
+import { T, NF, sf, inp, SLOTS, pickItemMeta, parseBasis } from '../constants.js';
 import { generateFoodPhoto, compressImage } from '../api.js';
 
 const SHORT_LABEL = {
@@ -49,9 +49,7 @@ export function SavedMealsTab({ savedMeals, removeSavedMeal, setSavedMealPhoto, 
   const handleAddToSlot = (meal, slotKey) => {
     // Ingredients go in as one serving, with the basis in the name for clarity
     const name = meal.kind === 'ingredient' && meal.per ? `${meal.n} (${meal.per})` : meal.n;
-    const item = { custom: true, n: name, k: meal.k, p: meal.p, c: meal.c, f: meal.f };
-    if (meal.analysis) item.analysis = meal.analysis;
-    if (meal.aiChat) item.aiChat = meal.aiChat;
+    const item = { custom: true, n: name, k: meal.k, p: meal.p, c: meal.c, f: meal.f, ...pickItemMeta(meal) };
     addItem(slotKey, item);
     if (meal.photo && setSlotPhoto) setSlotPhoto(slotKey, meal.photo);
     setAdded(prev => {
@@ -241,6 +239,12 @@ export function SavedMealsTab({ savedMeals, removeSavedMeal, setSavedMealPhoto, 
                 <div style={{ ...NF, fontSize: 12, color: T.muted }}>
                   {meal.kind === 'ingredient' && meal.per ? `per ${meal.per} — ` : ''}{meal.k} kcal · {meal.p}P · {meal.c}C · {meal.f}F
                 </div>
+                {meal.kind === 'ingredient' && (() => {
+                  const b = parseBasis(meal.per);
+                  if (!b.ok) return <div style={{ fontSize: 11, color: T.over, marginTop: 3 }}>Basis needs a number and unit, e.g. "60 g" — the AI can't scale this entry.</div>;
+                  if (b.countLike && b.n > 1) return <div style={{ fontSize: 11, color: T.gold, marginTop: 3 }}>Stated per {b.n} {b.unit} — edit to normalise to 1 so the AI scales it correctly.</div>;
+                  return null;
+                })()}
               </div>
               <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
                 <button onClick={() => onEditSavedMeal(meal)}
