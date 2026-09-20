@@ -333,6 +333,7 @@ export default function App() {
             wStats={app.wStats}
             waistInput={app.waistInput} setWaistInput={app.setWaistInput} logWaist={app.logWaist} waistStats={app.waistStats}
             markers={app.markers} addMarker={app.addMarker} removeMarker={app.removeMarker}
+            calibration={app.calibration}
             goals={app.goals} updateGoals={app.updateGoals}
             theme={theme} toggleTheme={toggleTheme}
             showGuide={showGuide} toggleGuide={toggleGuide}
@@ -347,7 +348,6 @@ export default function App() {
             <GuideTab
               wStats={app.wStats}
               goals={app.goals}
-              updateGoals={app.updateGoals}
               dayName={meta.name}
               isToday={day === todayISO}
               eaten={eaten}
@@ -356,7 +356,7 @@ export default function App() {
               addExercise={app.addExercise}
               removeExercise={app.removeExercise}
               weeklyDeficit={app.weeklyDeficit}
-              calibration={app.calibration}
+              markers={app.markers}
             />
           </Suspense>
         )}

@@ -1,9 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Plus, X, ChevronDown } from 'lucide-react';
-import { T, NF, EXERCISE_PRESETS } from '../constants.js';
+import { T, NF, EXERCISE_PRESETS, shiftISO, localDateISO } from '../constants.js';
 
-function Fold({ title, sub, children }) {
-  const [open, setOpen] = useState(true);
+/* ── Coach tab ──
+   Answers two questions, in this order: "Am I on track this week?" and "what did I do today?".
+   The maintenance setting and its calibration check live in Settings (they are configuration,
+   not a daily read). The long fat-loss field guide is reduced to one collapsed fold. */
+
+function Fold({ title, sub, children, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:14, marginBottom:10, overflow:'hidden' }}>
       <button onClick={() => setOpen(v => !v)}
@@ -20,30 +25,19 @@ function Fold({ title, sub, children }) {
   );
 }
 
-export function GuideTab({ wStats, goals, updateGoals, dayName, isToday,
-  eaten, exercise, exerciseK, addExercise, removeExercise, weeklyDeficit, calibration }) {
-  const [calWin, setCalWin] = useState('w4');
-  const [deficit, setDeficit] = useState(300);
-  const [curWt,   setCurWt]   = useState('');
-  const [goalWt,  setGoalWt]  = useState('80');
-  const [exName,  setExName]  = useState('');
-  const [exKcal,  setExKcal]  = useState('');
+const Cell = ({ label, value, unit, color }) => (
+  <div style={{ background:T.surface, padding:'12px 6px', textAlign:'center' }}>
+    <div style={{ fontSize:10, color:T.muted, letterSpacing:0.5, textTransform:'uppercase', marginBottom:4 }}>{label}</div>
+    <div style={{ ...NF, fontSize:20, fontWeight:700, color: color || T.ink, lineHeight:1 }}>
+      {value} <span style={{ fontSize:11, color:T.muted, fontWeight:400 }}>{unit}</span>
+    </div>
+  </div>
+);
 
-  useEffect(() => {
-    if (wStats?.current) setCurWt(String(wStats.current.toFixed(1)));
-  }, [wStats?.current]);
-
-  const KCAL_PER_KG = 7700;
-  const perWk  = (deficit * 7) / KCAL_PER_KG;
-  const perMo  = (deficit * 30) / KCAL_PER_KG;
-  const cur    = parseFloat(curWt);
-  const goal   = parseFloat(goalWt);
-  const toGoal = (!isNaN(cur) && !isNaN(goal) && cur > goal) ? Math.round((cur - goal) / perWk) : null;
-
-  const maint    = goals.maintenance || 2200;
-  const net      = eaten.k - exerciseK;
-  const dayDef   = maint - net;
-  const surplus  = dayDef < 0;
+export function GuideTab({ goals, dayName, isToday, eaten, exercise, exerciseK, addExercise, removeExercise,
+  weeklyDeficit, wStats, markers = [] }) {
+  const [exName, setExName] = useState('');
+  const [exKcal, setExKcal] = useState('');
 
   const submitExercise = () => {
     const k = Math.round(parseFloat(exKcal));
@@ -53,267 +47,153 @@ export function GuideTab({ wStats, goals, updateGoals, dayName, isToday,
     setExName(''); setExKcal('');
   };
 
-  const inputStyle = {
-    width:72, textAlign:'center', fontWeight:700, fontSize:15, color:T.accent,
-    background:`${T.accent}14`, border:`1.5px solid ${T.border}`, borderRadius:10,
-    padding:'7px 4px', outline:'none', WebkitAppearance:'none', MozAppearance:'textfield',
-  };
+  // A marker (creatine start, new block…) inside the last 4 weeks means the scale is
+  // carrying water that the trend line will misread as slower fat loss.
+  const today = localDateISO();
+  const recentMarker = markers.find(m => m.date >= shiftISO(today, -28) && m.date <= today);
+
+  const wk = weeklyDeficit;
+  const verdict = (() => {
+    if (!wk) return null;
+    const d = wk.avgDeficit;
+    if (d < 0)   return { color:T.over, text:'Surplus this week. One or two big days usually explain it — check the weekend.' };
+    if (d < 200) return { color:T.gold, text:'Thin deficit. Fat loss will be slow at this pace; weekends are usually where it leaks.' };
+    if (d <= 700) return { color:T.ok, text:'On track. This pace loses about a third of a kilo a week. Keep doing this.' };
+    return { color:T.gold, text:'Aggressive. Fine for a week, but watch recovery if you are lifting.' };
+  })();
+
+  const rate = wStats?.recentPerWk;
 
   return (
     <div style={{ padding:'16px 16px 32px', overflowY:'auto' }}>
 
       {/* ── header ── */}
       <div style={{ marginBottom:18 }}>
-        <div style={{ ...NF, fontSize:11, letterSpacing:1.5, color:T.gold, fontWeight:700, marginBottom:8 }}>
-          COACH
-        </div>
+        <div style={{ ...NF, fontSize:11, letterSpacing:1.5, color:T.gold, fontWeight:700, marginBottom:8 }}>COACH</div>
         <div style={{ fontSize:28, fontWeight:800, color:T.ink, lineHeight:1.05, letterSpacing:-0.5 }}>
           Trust the <span style={{ color:T.accent }}>trend</span>,<br/>not the day.
         </div>
       </div>
 
-      {/* ── live deficit ── */}
-      <div style={{ marginBottom:22 }}>
-        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:16, padding:'18px 16px' }}>
+      {/* ── this week ── */}
+      <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:16, padding:'18px 16px', marginBottom:12 }}>
+        <div style={{ ...NF, fontSize:11, letterSpacing:1.5, color:T.gold, fontWeight:700, marginBottom:10 }}>THIS WEEK</div>
 
-          <div style={{ ...NF, fontSize:11, letterSpacing:1.5, color:T.gold, fontWeight:700, marginBottom:10 }}>
-            {isToday ? "TODAY'S DEFICIT — LIVE" : `${dayName.toUpperCase()} — DEFICIT`}
-          </div>
-
-          {/* headline number */}
-          <div style={{ display:'flex', alignItems:'flex-end', gap:6, marginBottom:14 }}>
-            <span style={{ ...NF, fontSize:54, lineHeight:0.9, color: surplus ? T.over : T.accent, fontWeight:700 }}>
-              {Math.abs(dayDef).toLocaleString()}
-            </span>
-            <span style={{ fontSize:13, color:T.muted, paddingBottom:7 }}>
-              kcal {surplus ? 'surplus' : 'deficit'} so far
-            </span>
-          </div>
-
-          {/* eaten / exercise / net */}
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:1, background:T.border, borderRadius:12, overflow:'hidden' }}>
-            {[
-              { label:'Eaten',    value:eaten.k.toLocaleString(),    unit:'kcal' },
-              { label:'Exercise', value:exerciseK ? `−${exerciseK.toLocaleString()}` : '0', unit:'kcal' },
-              { label:'Net',      value:net.toLocaleString(),        unit:'kcal' },
-            ].map(({ label, value, unit }) => (
-              <div key={label} style={{ background:T.surface, padding:'13px 8px', textAlign:'center' }}>
-                <div style={{ fontSize:10, color:T.muted, letterSpacing:0.5, textTransform:'uppercase', marginBottom:4 }}>{label}</div>
-                <div style={{ ...NF, fontSize:22, fontWeight:700, color:T.ink, lineHeight:1 }}>
-                  {value} <span style={{ fontSize:11, color:T.muted, fontWeight:400 }}>{unit}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* maintenance */}
-          <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:14, fontSize:13, color:T.muted }}>
-            <span>Blended maintenance</span>
-            <input type="number" inputMode="numeric" value={maint}
-              onChange={e => updateGoals({ maintenance: Math.max(0, Math.round(+e.target.value || 0)) })}
-              style={inputStyle} />
-            <span>kcal</span>
-          </div>
-
-          {/* calibrated maintenance — what your intake, exercise and scale actually imply */}
-          {calibration && (() => {
-            const cal = calibration[calWin];
-            const any = calibration.w4 || calibration.w8 || calibration.w12;
-            if (!any) return null;
-            const diff = cal ? cal.maint - maint : null;
-            return (
-              <div style={{ marginTop:14, background:T.bg, borderRadius:12, padding:'12px 12px' }}>
-                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
-                  <div style={{ ...NF, fontSize:10, color:T.accent, letterSpacing:1 }}>CALIBRATED MAINTENANCE</div>
-                  <div style={{ display:'flex', gap:4 }}>
-                    {[['w4','4 wk'],['w8','8 wk'],['w12','12 wk']].map(([k, l]) => (
-                      <button key={k} onClick={() => setCalWin(k)} disabled={!calibration[k]}
-                        style={{ padding:'2px 8px', borderRadius:20, fontSize:10, fontWeight:600, cursor: calibration[k] ? 'pointer' : 'default',
-                          border:`1px solid ${calWin === k ? T.accent : T.border}`,
-                          background: calWin === k ? T.accentLight : 'transparent',
-                          color: !calibration[k] ? T.faint : calWin === k ? T.accent : T.muted }}>{l}</button>
-                    ))}
-                  </div>
-                </div>
-                {!cal ? (
-                  <div style={{ fontSize:12, color:T.muted }}>Not enough logged days and weigh-ins in this window yet.</div>
-                ) : (
-                  <>
-                    <div style={{ display:'flex', alignItems:'baseline', gap:8, flexWrap:'wrap' }}>
-                      <span style={{ ...NF, fontSize:26, fontWeight:700, color:T.ink, lineHeight:1 }}>{cal.maint.toLocaleString()}</span>
-                      <span style={{ fontSize:12, color:T.muted }}>kcal/day implied</span>
-                      {diff != null && Math.abs(diff) >= 50 && (
-                        <span style={{ ...NF, fontSize:12, fontWeight:700, color: diff < 0 ? T.over : T.ok }}>{diff > 0 ? '+' : ''}{diff} vs setting</span>
-                      )}
-                      {diff != null && Math.abs(diff) >= 50 && (
-                        <button onClick={() => updateGoals({ maintenance: cal.maint })}
-                          style={{ marginLeft:'auto', padding:'5px 10px', borderRadius:8, border:'none', background:T.accent, color:'#fff',
-                            fontSize:11, fontWeight:700, cursor:'pointer' }}>Apply</button>
-                      )}
-                    </div>
-                    <div style={{ fontSize:11, color:T.muted, marginTop:6, lineHeight:1.5 }}>
-                      {cal.days} logged days, avg {cal.avgEaten.toLocaleString()} eaten, {cal.avgEx} exercise; 7-day-avg weight moved {cal.deltaKg > 0 ? '+' : ''}{cal.deltaKg} kg.
-                      Water shifts (creatine, a new training block, a salty weekend at the end) distort this. Prefer the longest window that doesn't span one.
-                    </div>
-                  </>
-                )}
-              </div>
-            );
-          })()}
-
-          {/* exercise log */}
-          <div style={{ marginTop:16, paddingTop:14, borderTop:`1px dashed ${T.border}` }}>
-            <div style={{ ...NF, fontSize:10, color:T.accent, letterSpacing:1, marginBottom:8 }}>EXERCISE LOG</div>
-            {exercise.map((e, i) => (
-              <div key={i} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
-                <button onClick={() => removeExercise(i)}
-                  style={{ background:'none', border:'none', cursor:'pointer', padding:2, flexShrink:0,
-                    display:'flex', alignItems:'center', justifyContent:'center' }}>
-                  <X size={14} color={T.faint} />
-                </button>
-                <span style={{ flex:1, fontSize:14, fontWeight:600, color:T.ink, minWidth:0 }}>{e.n}</span>
-                <span style={{ ...NF, fontSize:14, fontWeight:700, color:T.accent }}>−{(+e.k || 0).toLocaleString()} kcal</span>
-              </div>
-            ))}
-            {/* presets fill the inputs so the kcal can still be adjusted before adding */}
-            <div style={{ display:'flex', gap:6, overflowX:'auto', paddingBottom:4, marginTop: exercise.length ? 10 : 0, scrollbarWidth:'none' }}>
-              {EXERCISE_PRESETS.map(p => (
-                <button key={p.n} onClick={() => { setExName(p.n); setExKcal(String(p.k)); }}
-                  style={{ flexShrink:0, padding:'5px 10px', borderRadius:20, border:`1px solid ${exName === p.n ? T.accent : T.border}`,
-                    background: exName === p.n ? T.accentLight : 'transparent', color: exName === p.n ? T.accent : T.muted,
-                    fontSize:11, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap' }}>
-                  {p.n} · {p.k}
-                </button>
-              ))}
+        {!wk ? (
+          <div style={{ fontSize:13, color:T.muted }}>Check off meals to see how the week is tracking.</div>
+        ) : (
+          <>
+            <div style={{ display:'flex', alignItems:'flex-end', gap:8, marginBottom:4 }}>
+              <span style={{ ...NF, fontSize:54, lineHeight:0.9, fontWeight:700, color: wk.avgDeficit < 0 ? T.over : T.accent }}>
+                {Math.abs(Math.round(wk.avgDeficit)).toLocaleString()}
+              </span>
+              <span style={{ fontSize:13, color:T.muted, paddingBottom:7 }}>
+                kcal/day {wk.avgDeficit < 0 ? 'surplus' : 'deficit'}, average
+              </span>
             </div>
-            <div style={{ display:'flex', gap:6, marginTop:6 }}>
-              <input value={exName} onChange={e => setExName(e.target.value)} placeholder="Golf, gym session…"
-                onKeyDown={e => { if (e.key === 'Enter') submitExercise(); }}
-                style={{ flex:1, minWidth:0, fontSize:14, color:T.ink, background:T.bg,
-                  border:`1.5px solid ${T.border}`, borderRadius:10, padding:'8px 10px', outline:'none' }} />
-              <input value={exKcal} onChange={e => { if (/^\d*$/.test(e.target.value)) setExKcal(e.target.value); }}
-                placeholder="kcal" type="text" inputMode="numeric"
-                onKeyDown={e => { if (e.key === 'Enter') submitExercise(); }}
-                style={{ width:64, textAlign:'center', fontSize:14, fontWeight:700, color:T.accent, background:T.bg,
-                  border:`1.5px solid ${T.border}`, borderRadius:10, padding:'8px 4px', outline:'none' }} />
-              <button onClick={submitExercise}
-                style={{ background:T.accent, border:'none', borderRadius:10, width:38, cursor:'pointer',
-                  display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                <Plus size={17} color="#fff" />
-              </button>
+            <div style={{ fontSize:12, color:T.muted, marginBottom:14 }}>
+              ≈ <b style={{ color:T.ink }}>{Math.abs(wk.paceKgWk).toFixed(2)} kg/wk</b> pace · {wk.days} day{wk.days === 1 ? '' : 's'} logged
             </div>
-          </div>
 
-          {/* weekly rollup */}
-          {weeklyDeficit && (
-            <div style={{ fontSize:12, color:T.muted, marginTop:14, lineHeight:1.55 }}>
-              This week: ~<b style={{ color: weeklyDeficit.total < 0 ? T.over : T.accent }}>{Math.abs(weeklyDeficit.total).toLocaleString()} kcal {weeklyDeficit.total < 0 ? 'surplus' : 'deficit'}</b> across {weeklyDeficit.days} logged day{weeklyDeficit.days === 1 ? '' : 's'} ≈ <b style={{ color:T.ink }}>{Math.abs(weeklyDeficit.kg).toFixed(2)} kg</b> of fat. Your eating target and protein goal don't move — exercise deepens the deficit, it doesn't buy food back.
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:1, background:T.border, borderRadius:12, overflow:'hidden' }}>
+              <Cell label="Eaten / day" value={wk.avgEaten.toLocaleString()} unit="kcal" />
+              <Cell label="Exercise / day" value={wk.avgEx.toLocaleString()} unit="kcal" />
+              <Cell label="Target" value={goals.kcal.toLocaleString()} unit="kcal" color={wk.avgEaten > goals.kcal ? T.over : T.ink} />
             </div>
-          )}
-        </div>
+
+            {verdict && (
+              <div style={{ fontSize:13, color:T.ink, marginTop:14, lineHeight:1.5, paddingLeft:10, borderLeft:`3px solid ${verdict.color}` }}>
+                {verdict.text}
+              </div>
+            )}
+
+            {/* what the scale says, smoothed, against the plan */}
+            <div style={{ marginTop:14, paddingTop:12, borderTop:`1px dashed ${T.border}`, fontSize:12, color:T.muted, lineHeight:1.55 }}>
+              {rate != null ? (
+                <>
+                  Scale, 7-day average: <b style={{ color: rate < 0 ? T.ok : rate > 0 ? T.over : T.ink }}>{rate > 0 ? '+' : ''}{rate.toFixed(2)} kg/wk</b> over the last 4 weeks.
+                  {recentMarker && (
+                    <> <b style={{ color:T.gold }}>"{recentMarker.label}"</b> ({new Date(recentMarker.date + 'T12:00:00').toLocaleDateString('en-AU', { day:'numeric', month:'short' })}) sits inside that window, so the scale is holding water and under-reads fat loss. Judge by the deficit above until it clears.</>
+                  )}
+                </>
+              ) : (
+                <>Log weight daily for four weeks and the scale trend will appear here.</>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
-      {/* ── field guide (collapsed) ── */}
-      <div style={{ ...NF, fontSize:11, letterSpacing:1.5, color:T.gold, fontWeight:700, marginBottom:10 }}>
-        FAT-LOSS FIELD GUIDE
-      </div>
-
-      <Fold title="Your deficit — your loss" sub="Drag to see what each daily deficit actually buys you.">
-        <div style={{ display:'flex', alignItems:'flex-end', gap:6, marginBottom:18 }}>
-          <span style={{ ...NF, fontSize:54, lineHeight:0.9, color:T.accent, fontWeight:700 }}>{deficit}</span>
-          <span style={{ fontSize:13, color:T.muted, paddingBottom:7 }}>kcal / day deficit</span>
+      {/* ── today ── */}
+      <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:16, padding:'16px 16px', marginBottom:12 }}>
+        <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', marginBottom:10 }}>
+          <div style={{ ...NF, fontSize:11, letterSpacing:1.5, color:T.gold, fontWeight:700 }}>{isToday ? 'TODAY' : dayName.toUpperCase()}</div>
+          <div style={{ fontSize:12, color:T.muted }}>
+            <b style={{ ...NF, fontSize:15, color: eaten.k > goals.kcal ? T.over : T.ink }}>{eaten.k.toLocaleString()}</b> / {goals.kcal.toLocaleString()} kcal eaten
+            {exerciseK > 0 && <> · <b style={{ ...NF, fontSize:15, color:T.accent }}>−{exerciseK.toLocaleString()}</b> exercise</>}
+          </div>
         </div>
 
-        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:6, fontSize:12, color:T.muted }}>
-          <span>Eat less / move more</span>
-          <span style={{ fontWeight:600, color:T.ink }}>{(deficit * 7).toLocaleString()} kcal / week</span>
-        </div>
-        <input type="range" min={200} max={700} step={25} value={deficit}
-          onChange={e => setDeficit(Number(e.target.value))}
-          style={{ width:'100%', accentColor:T.accent, cursor:'pointer' }} />
-        <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, color:T.faint, marginTop:4 }}>
-          <span>200</span><span>400</span><span>700</span>
-        </div>
+        {exercise.map((e, i) => (
+          <div key={i} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
+            <button onClick={() => removeExercise(i)}
+              style={{ background:'none', border:'none', cursor:'pointer', padding:2, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <X size={14} color={T.faint} />
+            </button>
+            <span style={{ flex:1, fontSize:14, fontWeight:600, color:T.ink, minWidth:0 }}>{e.n}</span>
+            <span style={{ ...NF, fontSize:14, fontWeight:700, color:T.accent }}>−{(+e.k || 0).toLocaleString()} kcal</span>
+          </div>
+        ))}
 
-        {/* weight inputs */}
-        <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginTop:18, fontSize:13, color:T.muted }}>
-          <span>From</span>
-          <input type="number" inputMode="decimal" step="0.1" value={curWt}
-            onChange={e => setCurWt(e.target.value)} style={inputStyle} />
-          <span style={{ color:T.accent, fontWeight:700, fontSize:18 }}>→</span>
-          <input type="number" inputMode="decimal" step="0.1" value={goalWt}
-            onChange={e => setGoalWt(e.target.value)} style={inputStyle} />
-          <span>kg</span>
-        </div>
-
-        {/* stats grid */}
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:1, background:T.border, borderRadius:12, overflow:'hidden', marginTop:18 }}>
-          {[
-            { label:'Fat / week',  value:perWk.toFixed(2), unit:'kg' },
-            { label:'Fat / month', value:perMo.toFixed(1),  unit:'kg' },
-            { label:'To goal',     value:toGoal != null ? String(toGoal) : '—', unit:toGoal != null ? 'wks' : '' },
-          ].map(({ label, value, unit }) => (
-            <div key={label} style={{ background:T.surface, padding:'13px 8px', textAlign:'center' }}>
-              <div style={{ fontSize:10, color:T.muted, letterSpacing:0.5, textTransform:'uppercase', marginBottom:4 }}>{label}</div>
-              <div style={{ ...NF, fontSize:22, fontWeight:700, color:T.ink, lineHeight:1 }}>
-                {value} <span style={{ fontSize:11, color:T.muted, fontWeight:400 }}>{unit}</span>
-              </div>
-            </div>
+        {/* presets fill the inputs so the kcal can still be adjusted before adding */}
+        <div style={{ display:'flex', gap:6, overflowX:'auto', paddingBottom:4, marginTop: exercise.length ? 8 : 0, scrollbarWidth:'none' }}>
+          {EXERCISE_PRESETS.map(p => (
+            <button key={p.n} onClick={() => { setExName(p.n); setExKcal(String(p.k)); }}
+              style={{ flexShrink:0, padding:'5px 10px', borderRadius:20, border:`1px solid ${exName === p.n ? T.accent : T.border}`,
+                background: exName === p.n ? T.accentLight : 'transparent', color: exName === p.n ? T.accent : T.muted,
+                fontSize:11, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap' }}>
+              {p.n} · {p.k}
+            </button>
           ))}
         </div>
-
-        <div style={{ fontSize:12, color:T.muted, marginTop:12, lineHeight:1.55 }}>
-          Maths: 1 kg of fat ≈ 7,700 kcal. Your everyday working deficit sits near <b style={{ color:T.over }}>~300 kcal</b> (≈1,900 eaten vs ≈2,200 blended maintenance), edging higher on golf weeks. The scale often drops <em>faster</em> than this early on — that's water leaving, not magic. It then settles to the true fat rate.
+        <div style={{ display:'flex', gap:6, marginTop:6 }}>
+          <input value={exName} onChange={e => setExName(e.target.value)} placeholder="Log exercise…"
+            onKeyDown={e => { if (e.key === 'Enter') submitExercise(); }}
+            style={{ flex:1, minWidth:0, fontSize:14, color:T.ink, background:T.bg,
+              border:`1.5px solid ${T.border}`, borderRadius:10, padding:'8px 10px', outline:'none' }} />
+          <input value={exKcal} onChange={e => { if (/^\d*$/.test(e.target.value)) setExKcal(e.target.value); }}
+            placeholder="kcal" type="text" inputMode="numeric"
+            onKeyDown={e => { if (e.key === 'Enter') submitExercise(); }}
+            style={{ width:64, textAlign:'center', fontSize:14, fontWeight:700, color:T.accent, background:T.bg,
+              border:`1.5px solid ${T.border}`, borderRadius:10, padding:'8px 4px', outline:'none' }} />
+          <button onClick={submitExercise}
+            style={{ background:T.accent, border:'none', borderRadius:10, width:38, cursor:'pointer',
+              display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+            <Plus size={17} color="#fff" />
+          </button>
         </div>
-      </Fold>
-
-      <Fold title="You can't gain fat overnight" sub="It takes a ~5,000 kcal surplus to gain just 350 g.">
-        <div style={{ background:T.accent, borderRadius:14, padding:'18px 16px' }}>
-          <div style={{ fontSize:18, fontWeight:800, color:'#fff', lineHeight:1.25, marginBottom:10 }}>
-            You'd need ~<span style={{ color:'#7FD3A8' }}>5,000 kcal</span> surplus in one day to gain just 350 g of fat.
-          </div>
-          <div style={{ fontSize:13, color:'rgba(255,255,255,0.72)', lineHeight:1.55 }}>
-            Your biggest logged day in two weeks was 2,210. So a same-day jump on the scale is physically impossible to be fat — it's water, glycogen, food in transit, or recovery. Read that twice next time you panic.
-          </div>
+        <div style={{ fontSize:11, color:T.faint, marginTop:8 }}>
+          Exercise deepens the deficit shown above. It never raises the eating target.
         </div>
-      </Fold>
-
-      <Fold title="Why the scale jumps" sub="All temporary. All reversible. None of it fat.">
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-          {[
-            { tag:'GLYCOGEN + WATER', amt:'0.5–2 kg',   body:'A high-carb day refills glycogen, and each gram holds 3–4 g of water. Your carbs can swing 100+ g day to day — that alone moves the scale.' },
-            { tag:'SODIUM',           amt:'0.5–1.5 kg', body:'One salty meal pulls in water for a day or two. Looks like gain, weighs like gain, isn\'t gain.' },
-            { tag:'FOOD IN TRANSIT',  amt:'varies',     body:'Food and fluid physically inside you still count on the scale until they\'ve passed through.' },
-            { tag:'RECOVERY',         amt:'24–72 hrs',  body:'A long golf round or a gym session inflames muscle and holds water while it repairs — temporary, and a sign of progress.' },
-          ].map(({ tag, amt, body }) => (
-            <div key={tag} style={{ background:T.bg, border:`1px solid ${T.border}`, borderRadius:14, padding:'14px 13px' }}>
-              <div style={{ ...NF, fontSize:10, color:T.accent, letterSpacing:1, marginBottom:4 }}>{tag}</div>
-              <div style={{ fontSize:18, fontWeight:700, color:T.ink, marginBottom:6 }}>{amt}</div>
-              <div style={{ fontSize:12.5, color:T.muted, lineHeight:1.5 }}>{body}</div>
-            </div>
-          ))}
-        </div>
-      </Fold>
-
-      <Fold title="How glycogen works" sub="The single biggest reason your daily weight wanders.">
-        <div style={{ background:`${T.accent}12`, borderRadius:14, padding:'18px 16px' }}>
-          <p style={{ fontSize:14, color:T.ink, marginBottom:12, lineHeight:1.6 }}>
-            Glycogen is your body's stored carbohydrate — a quick-energy reserve kept in your muscles (~300–500 g) and liver (~80–120 g).
-          </p>
-          <div style={{ borderLeft:`3px solid ${T.accent}`, paddingLeft:14, marginBottom:12 }}>
-            <p style={{ fontSize:15, fontWeight:700, color:T.accent, lineHeight:1.4 }}>
-              Every gram of glycogen is bound to roughly 3–4 g of water. So a full tank weighs far more on the scale than the carbs themselves.
-            </p>
-          </div>
-          <p style={{ fontSize:14, color:T.ink, lineHeight:1.6 }}>
-            Eat a big-carb day — scale up. Eat low-carb — scale down. In both cases your body fat hasn't changed at all. To lose actual fat, only one thing matters: a calorie deficit held steady across <b>weeks</b>.
-          </p>
-        </div>
-      </Fold>
-
-      <div style={{ fontSize:12, color:T.faint, lineHeight:1.55, paddingTop:16, borderTop:`1px solid ${T.border}`, marginTop:12 }}>
-        The 7,700 kcal/kg figure is a standard approximation; individual results vary, and early loss skews toward water. General guidance — not personalised medical advice.
       </div>
+
+      {/* ── one fold of reading material ── */}
+      <Fold title="Reading the scale" sub="Why a daily reading can jump a kilo without any fat changing.">
+        {[
+          ['Water and glycogen', 'A high-carb or salty day holds 0.5–2 kg of water for a day or two. Big golf-weekend dinners do this every week.'],
+          ['Creatine', 'Pulls about a kilo of water into muscle in the first weeks and keeps it there while you take it. Compare against the weight after it settled, not before.'],
+          ['Training', 'A hard session inflames muscle and holds water for 24–72 hours. A sign of work done, not fat gained.'],
+          ['The whoosh', 'Fat loss often shows up as a flat fortnight then a sudden drop. Your log has done this twice already. Judge by the 7-day average over four weeks.'],
+        ].map(([h, body]) => (
+          <div key={h} style={{ marginBottom:10 }}>
+            <div style={{ fontSize:13, fontWeight:700, color:T.ink, marginBottom:2 }}>{h}</div>
+            <div style={{ fontSize:12.5, color:T.muted, lineHeight:1.5 }}>{body}</div>
+          </div>
+        ))}
+        <div style={{ fontSize:11, color:T.faint, lineHeight:1.5, marginTop:6 }}>
+          1 kg of fat ≈ 7,700 kcal. Your daily burn setting lives in Settings → Goals, with a check against your own scale data.
+        </div>
+      </Fold>
     </div>
   );
 }

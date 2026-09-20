@@ -60,11 +60,11 @@ Photos (meal slot photos + saved meal photos):
 | `src/components/LoginScreen.jsx` | Two-step login: email → 6-digit code |
 | `src/components/MealCard.jsx` | Day plan meal slot card with photo, items, check |
 | `src/components/AddItemSheet.jsx` | Bottom sheet to add/edit a meal item |
-| `src/components/SettingsTab.jsx` | Weight log, goals, backup/restore, account |
+| `src/components/SettingsTab.jsx` | Weight + waist log, chart markers, goals (incl. "Daily burn without exercise" = `goals.maintenance` and the "Is this number right?" calibration check), backup/restore, account |
 | `src/components/ProgressTab.jsx` | Weekly progress charts |
 | `src/components/SavedMealsTab.jsx` | Saved meals library (star favourites) |
 | `src/components/AiChat.jsx` | AI assistant tab |
-| `src/components/GuideTab.jsx` | "Coach" tab — live deficit display (exercise log, net kcal vs maintenance) + collapsible fat-loss field guide. Internal tab key stays `guide` (nav label is "Coach") for backwards compat with `nt-show-guide` localStorage |
+| `src/components/GuideTab.jsx` | "Coach" tab — two cards: THIS WEEK (average daily deficit over logged days, kg/wk pace, eaten/exercise/target, a one-line verdict, and the 4-week 7-day-avg scale rate with a warning when a marker sits inside that window) and TODAY (eaten vs target + exercise log with presets), plus one collapsed "Reading the scale" fold. The maintenance input and its calibration check were moved to Settings → Goals (2026-09-20) because they are configuration, not a daily read. Internal tab key stays `guide` (nav label is "Coach") for backwards compat with `nt-show-guide` localStorage |
 | `src/components/AnalyzeSheet.jsx` | Photo nutrition analysis sheet |
 | `src/components/ui.jsx` | Shared components: `StatCard`, `MacroGauge`, `NavBtn` |
 | `src/api.js` | OpenAI (GPT-4o-mini) for nutrition lookup + photo analysis + AI chat; FatSecret search via proxy |
@@ -117,7 +117,8 @@ Ingredients are `savedMeals` entries with `kind: 'ingredient'` and `per` (free-f
 - `logWeight(kg)` — adds weight entry for current day. `wStats` also exposes `avg7` (trailing 7-day mean) and `recentPerWk` (4-week rate from 7-day-averaged endpoints, null until there is enough data). Progress draws daily weights faint and the 7-day average bold.
 - `logWaist(cm)` — `data.waist` = `[{ date, cm }]`; `waistStats` gives current, overall and 4-week change. Logged from Settings under the weight input.
 - `splitAvg` — weekday vs weekend average kcal over the last 28 logged days (Progress weekly-averages card).
-- `calibration` — `{ w4, w8, w12 }` implied maintenance from Σeaten − Σexercise − Δkg×7700 over each window (Δkg from 7-day-averaged weight); null when <14 logged days or too few weigh-ins. Coach tab shows it with an Apply button that sets `goals.maintenance`.
+- `calibration` — `{ w4, w8, w12 }` implied maintenance from Σeaten − Σexercise − Δkg×7700 over each window (Δkg from 7-day-averaged weight); null when <14 logged days or too few weigh-ins. Shown in Settings → Goals as a plain-language verdict ("looks right" / "looks about N too high"), no Apply button. **Refuses to report** when any `markers` entry falls inside the window (`cal.from`..`cal.to`), because water shifts (creatine, new block) make the scale misread fat change — this is deliberate after the 1777 incident (2026-09-20).
+- `weeklyDeficit` — `{ total, days, kg, avgEaten, avgEx, avgDeficit, paceKgWk }` over logged days of the visible week; drives the Coach THIS WEEK card.
 - `addMarker(date, label)` / `removeMarker(idx)` — `data.markers` = `[{ date, label }]`, drawn as labelled dashed vertical lines on the Progress weight chart (week/month: first point on or after the date; all: the month's point). Managed in Settings → "Weight chart markers". `normalizeData` seeds `[{ 2026-08-31, "Creatine start" }]` once when the field is absent; an empty array is preserved (never re-seeded).
 - `addExercise(name, kcal)` / `removeExercise(idx)` — exercise log for current day. `EXERCISE_PRESETS` in constants.js are chips in the Coach tab that prefill the inputs (Golf 18 holes walking = 1000, etc.). (`data.exercise[date]` = `[{ n, k }]`). Powers the deficit display in GuideTab: deficit = `goals.maintenance` (default 2200) + exercise − eaten. **Deficit-display model** — exercise never raises the eating target or macros, it only deepens the shown deficit. `weeklyDeficit` memo rolls it up across logged days of the week.
 - `saveMeal(item, photo?)` — saves to savedMeals library
