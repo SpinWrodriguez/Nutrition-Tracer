@@ -302,7 +302,11 @@ export function useAppData(userId = null) {
       });
     if (!days.length) return null;
     const total = Math.round(days.reduce((s, v) => s + v, 0));
-    return { total, days: days.length, kg: total / 7700 };
+    const logged = weeklyNutrition.filter(dd => dd.eaten.k > 0);
+    const avgEaten = Math.round(logged.reduce((s, dd) => s + dd.eaten.k, 0) / logged.length);
+    const avgEx    = Math.round(logged.reduce((s, dd) => s + toArr((data.exercise || {})[dd.date]).reduce((a, e) => a + (+e.k || 0), 0), 0) / logged.length);
+    const avgDeficit = total / days.length;
+    return { total, days: days.length, kg: total / 7700, avgEaten, avgEx, avgDeficit, paceKgWk: (avgDeficit * 7) / 7700 };
   }, [weeklyNutrition, data.exercise, goals]);
 
   const streak = useMemo(() => {

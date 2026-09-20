@@ -3,8 +3,9 @@ import { Plus, X, Download, Upload, CheckCircle, AlertCircle, LogOut } from 'luc
 import { T, NF, inp, localDateISO } from '../constants.js';
 import { StatCard } from './ui.jsx';
 
-export function SettingsTab({ wInput, setWInput, day, logWeight, wStats, waistInput, setWaistInput, logWaist, waistStats, markers = [], addMarker, removeMarker, goals, updateGoals, theme, toggleTheme, showGuide, toggleGuide, getQuickBackup, getArchiveBackup, importData, userEmail, onSignOut }) {
+export function SettingsTab({ wInput, setWInput, day, logWeight, wStats, waistInput, setWaistInput, logWaist, waistStats, markers = [], addMarker, removeMarker, calibration, goals, updateGoals, theme, toggleTheme, showGuide, toggleGuide, getQuickBackup, getArchiveBackup, importData, userEmail, onSignOut }) {
   const fileRef = useRef(null);
+  const [calWin, setCalWin] = useState('w8');
   const [markerLabel, setMarkerLabel] = useState('');
   const [markerDate,  setMarkerDate]  = useState(day);
   const submitMarker = () => {
@@ -224,6 +225,54 @@ export function SettingsTab({ wInput, setWInput, day, logWeight, wStats, waistIn
               />
             </div>
           ))}
+        </div>
+
+        {/* daily burn (maintenance) — the number every deficit figure in Coach rests on */}
+        <div style={{ marginTop:14, paddingTop:12, borderTop:`1px dashed ${T.border}` }}>
+          <div style={{ fontSize:11, color:T.muted, marginBottom:4, fontWeight:500 }}>Daily burn without exercise (kcal)</div>
+          <input type="text" inputMode="numeric" value={goals.maintenance ?? ''}
+            onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 0) updateGoals({ maintenance: v }); }}
+            style={{ ...inp, padding:'9px 12px', fontSize:15 }} />
+          <div style={{ fontSize:11, color:T.faint, marginTop:4 }}>
+            Coach's deficit = this + logged exercise − eaten. Exercise never raises the eating target.
+          </div>
+
+          {/* reality check: what your own intake, exercise and 7-day-avg scale imply */}
+          {calibration && (calibration.w4 || calibration.w8 || calibration.w12) && (() => {
+            const cal = calibration[calWin];
+            const inWindow = cal ? markers.filter(m => m.date >= cal.from && m.date <= cal.to) : [];
+            const diff = cal ? cal.maint - (goals.maintenance || 0) : null;
+            const fmt = d => new Date(d + 'T12:00:00').toLocaleDateString('en-AU', { day:'numeric', month:'short' });
+            let verdict = null;
+            if (cal && !inWindow.length) {
+              if (Math.abs(diff) < 100) verdict = { color:T.ok, text:`Your setting looks right. Your scale over the last ${cal.windowDays / 7} weeks implies about ${cal.maint.toLocaleString()}.` };
+              else verdict = { color:T.gold, text:`Your setting looks about ${Math.abs(diff)} too ${diff < 0 ? 'high' : 'low'}. Your scale over the last ${cal.windowDays / 7} weeks implies about ${cal.maint.toLocaleString()}. Edit the number above if this holds for two checks in a row.` };
+            }
+            return (
+              <div style={{ marginTop:10, background:T.bg, borderRadius:10, padding:'10px 12px' }}>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6 }}>
+                  <div style={{ fontSize:11, color:T.muted, fontWeight:600 }}>Is this number right?</div>
+                  <div style={{ display:'flex', gap:4 }}>
+                    {[['w4','4 wk'],['w8','8 wk'],['w12','12 wk']].map(([k, l]) => (
+                      <button key={k} onClick={() => setCalWin(k)} disabled={!calibration[k]}
+                        style={{ padding:'2px 8px', borderRadius:20, fontSize:10, fontWeight:600, cursor: calibration[k] ? 'pointer' : 'default',
+                          border:`1px solid ${calWin === k ? T.accent : T.border}`, background: calWin === k ? T.accentLight : 'transparent',
+                          color: !calibration[k] ? T.faint : calWin === k ? T.accent : T.muted }}>{l}</button>
+                    ))}
+                  </div>
+                </div>
+                {!cal ? (
+                  <div style={{ fontSize:12, color:T.muted }}>Not enough logged days and weigh-ins in this window yet.</div>
+                ) : inWindow.length ? (
+                  <div style={{ fontSize:12, color:T.muted, lineHeight:1.5 }}>
+                    Can't check this window: <b style={{ color:T.gold }}>"{inWindow[0].label}"</b> ({fmt(inWindow[0].date)}) is inside it, and water shifts make the scale misread fat change. Try a window that starts after it, or wait.
+                  </div>
+                ) : (
+                  <div style={{ fontSize:12, color:T.ink, lineHeight:1.5, paddingLeft:8, borderLeft:`3px solid ${verdict.color}` }}>{verdict.text}</div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       </div>
 
