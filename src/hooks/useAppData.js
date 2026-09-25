@@ -376,6 +376,13 @@ export function useAppData(userId = null) {
     setSlotPhotos(p => ({ ...p, [day]: { ...(p[day] || {}), [slotKey]: photo } }));
   };
 
+  // Adding a second item to a slot must not replace the photo of the first (a Coke after the
+  // chicken). Adds go through this; only an explicit re-analysis of the first item overwrites.
+  const setSlotPhotoIfEmpty = (slotKey, photo) => {
+    if ((slotPhotos[day] || {})[slotKey]) return;
+    setSlotPhoto(slotKey, photo);
+  };
+
   const removeSlotPhoto = (slotKey) => {
     const idbKey = `slot:${day}:${slotKey}`;
     photoDel(idbKey).catch(() => {});
@@ -608,7 +615,7 @@ export function useAppData(userId = null) {
     goals, updateGoals,
     weekStart, weekDates, prevWeek, nextWeek,
     addItem, replaceItem, removeItem, setSlotItems,
-    setSlotPhoto, removeSlotPhoto,
+    setSlotPhoto, setSlotPhotoIfEmpty, removeSlotPhoto,
     toggleCheck, resetWeek, logWeight,
     saveMeal, removeSavedMeal, setSavedMealPhoto: setSavedMealPhotoAlias,
     updateSavedMeal, createSavedMeal,

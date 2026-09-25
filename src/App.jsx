@@ -34,6 +34,7 @@ export default function App() {
     addItem:      app.addItem,
     replaceItem:  app.replaceItem,
     setSlotPhoto:       app.setSlotPhoto,
+    setSlotPhotoIfEmpty: app.setSlotPhotoIfEmpty,
     saveMeal:           app.saveMeal,
     syncPhotoToMealLib: app.syncPhotoToMealLib,
     savedMeals:         app.savedMeals,
@@ -368,7 +369,7 @@ export default function App() {
             removeSavedMeal={app.removeSavedMeal}
             setSavedMealPhoto={app.setSavedMealPhoto}
             addItem={app.addItem}
-            setSlotPhoto={app.setSlotPhoto}
+            setSlotPhoto={app.setSlotPhotoIfEmpty}
             onOpenAddSheet={(kind) => { setSavedSheetKind(kind === 'ingredient' ? 'ingredient' : 'meal'); savedMealsSheet.openSheet('saved'); }}
             onEditSavedMeal={openEditSavedMeal}
             onViewAnalysis={meal => setAnalysisCtx({ type:'saved', meal })}
@@ -442,7 +443,7 @@ export default function App() {
         slotMeta={SLOTS.find(s => s.key === analyzeSlot)}
         learnedLibrary={app.ingredientsList}
         onClose={() => setAnalyzeSlot(null)}
-        onConfirm={(item, photo) => { app.addItem(analyzeSlot, item); if (photo) app.setSlotPhoto(analyzeSlot, photo); setAnalyzeSlot(null); }}
+        onConfirm={(item, photo) => { app.addItem(analyzeSlot, item); if (photo) app.setSlotPhotoIfEmpty(analyzeSlot, photo); setAnalyzeSlot(null); }}
       />
 
       {/* ── photo + chat analyzer sheet (saved meals / ingredients) ── */}
@@ -479,7 +480,8 @@ export default function App() {
             onConfirm={(item, newPhoto) => {
               if (analysisCtx.type === 'slot') {
                 app.replaceItem(analysisCtx.slotKey, analysisCtx.idx, item);
-                if (newPhoto) app.setSlotPhoto(analysisCtx.slotKey, newPhoto);
+                // Re-analysing the first item may refresh the slot photo; later items never replace it
+                if (newPhoto) (analysisCtx.idx === 0 ? app.setSlotPhoto : app.setSlotPhotoIfEmpty)(analysisCtx.slotKey, newPhoto);
               } else {
                 const { custom: _c, ...updates } = item;
                 app.updateSavedMeal(analysisCtx.meal.id, updates);
