@@ -124,6 +124,7 @@ Ingredients are `savedMeals` entries with `kind: 'ingredient'` and `per` (free-f
 - `saveMeal(item, photo?)` — saves to savedMeals library
 - `removeSavedMeal(id)` — removes from library
 - `setSlotPhoto(slotKey, base64)` — sets photo for current day slot
+- `setSlotPhotoIfEmpty(slotKey, base64)` — same, but no-op when the slot already has a photo. **All item adds use this** (AnalyzeSheet confirm, saved-meal/ingredient add, add sheet) so a second item (a Coke after the chicken) never replaces the meal photo. Only an edit/re-analysis of item index 0 calls `setSlotPhoto` directly (2026-09-25).
 - `removeSlotPhoto(slotKey)` — removes slot photo
 - `clearLocalData()` — sign-out cleanup (clears localStorage + IndexedDB)
 - `getFullBackup()` async — returns `{ ...data, _photos: { slots, meals } }` for download

@@ -6,7 +6,7 @@ import {
   generateFoodPhoto, compressImage,
 } from '../api.js';
 
-export function useItemSheet({ sel, day, addItem, replaceItem, setSlotPhoto, saveMeal, syncPhotoToMealLib, savedMeals, onConfirmItem }) {
+export function useItemSheet({ sel, day, addItem, replaceItem, setSlotPhoto, setSlotPhotoIfEmpty = setSlotPhoto, saveMeal, syncPhotoToMealLib, savedMeals, onConfirmItem }) {
   const [open,           setOpen]           = useState(null);
   const [editIdx,        setEditIdx]        = useState(null);
   const [query,          setQuery]          = useState('');
@@ -52,7 +52,8 @@ export function useItemSheet({ sel, day, addItem, replaceItem, setSlotPhoto, sav
     } else {
       if (editIdx !== null) { replaceItem(slot, editIdx, val); }
       else { addItem(slot, val); }
-      if (photo) setSlotPhoto(slot, photo);
+      // The slot photo belongs to the first item; later items never replace it
+      if (photo) (editIdx === 0 ? setSlotPhoto : setSlotPhotoIfEmpty)(slot, photo);
     }
     reset(); setOpen(null);
   };
