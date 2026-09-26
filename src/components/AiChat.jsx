@@ -21,9 +21,9 @@ export function AiChat({ dayContext }) {
 
   const STARTERS = [
     'What should I have for dinner?',
-    "How's my week going?",
+    'Be honest: how is my week going?',
     'Am I getting enough protein today?',
-    'Plan tomorrow around golf',
+    'Can I have a treat tonight?',
   ];
 
   const send = async (preset) => {
@@ -98,7 +98,7 @@ export function AiChat({ dayContext }) {
             {messages.length === 0 && (
               <div style={{ padding:'14px 0 6px' }}>
                 <p style={{ textAlign:'center', color:T.faint, fontSize:13, lineHeight:1.5, marginBottom:12 }}>
-                  Your coach sees today's meals, this week's averages, your weight trend and your saved meals.
+                  Your coach sees today's meals, this week's averages, your weight trend and your saved meals. It won't sugar-coat.
                 </p>
                 <div style={{ display:'flex', flexWrap:'wrap', gap:6, justifyContent:'center' }}>
                   {STARTERS.map(q => (
