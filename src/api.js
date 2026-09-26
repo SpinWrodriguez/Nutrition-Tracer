@@ -348,25 +348,55 @@ export async function aiDayChat(messages, ctx) {
   const slotLines = ctx.slots.map(s => {
     const items = s.items.filter(i => !i.skip);
     if (!items.length) return `${s.label}: empty`;
-    const sum = items.map(i => `${i.n} (${i.k}kcal ${i.p}P ${i.c}C ${i.f}F)`).join(' + ');
-    return `${s.label}${s.checked ? ' ✓' : ''}: ${sum}`;
+    const sum = items.map(i => `${i.n} (${i.k}kcal ${i.p}P ${i.c}C ${i.f}F${i.conf === 'estimated' ? ', eyeballed' : ''})`).join(' + ');
+    return `${s.label}${s.checked ? ' ✓ eaten' : ' (planned, not eaten yet)'}: ${sum}`;
   }).join('\n');
 
   const ingLines = (ctx.ingredients || [])
     .map(i => `- ${i.n} — per ${i.per || 'serving'}: ${i.k} kcal, ${i.p}g P, ${i.c}g C, ${i.f}g F`).join('\n');
+  const mealLines = (ctx.savedMeals || [])
+    .map(m => `- ${m.n}: ${m.k} kcal, ${m.p}P, ${m.c}C, ${m.f}F`).join('\n');
 
-  const system = `You are a friendly nutrition assistant in a meal-tracking app. Answer anything related to food, nutrition, ingredients, cooking, diets, calories, macros, health, or the user's logged meals. Be conversational and helpful.
+  const g = ctx.goals;
+  const left = { k: g.kcal - ctx.eaten.k, p: g.protein - ctx.eaten.p, c: (g.carbs || 0) - ctx.eaten.c, f: (g.fat || 0) - ctx.eaten.f };
+  const wk = ctx.weeklyAvg, wd = ctx.weeklyDeficit, ws = ctx.wStats, sp = ctx.splitAvg, waist = ctx.waistStats;
+  const exLines = (ctx.exercise || []).map(e => `${e.n} (${e.k} kcal)`).join(', ') || 'none logged';
+  const markerLines = (ctx.markers || []).map(m => `${m.date}: ${m.label}`).join('; ') || 'none';
 
-Only deflect with a short witty joke if the message is clearly nothing to do with food or nutrition (e.g. asking about sports scores, coding, or the weather). When in doubt, answer — it's better to be helpful than overly restrictive.
+  const system = `You are the user's personal fat-loss and nutrition coach inside their meal-tracking app: think experienced sports dietitian, not chatbot. The user is one adult in Australia who lifts weights, plays golf on weekends, tracks every meal, and is in a deliberate slow cut while keeping muscle.
 
-Answer in 2-4 sentences max. Be specific with numbers when relevant.
+HOW TO COACH
+- Lead with the answer or the recommendation, then the one or two numbers that justify it. No preamble, no "great question".
+- Be specific and practical: name foods, portions in grams, and use the user's own saved meals and ingredient facts before generic suggestions.
+- Work from the budget that is LEFT today (below), the day of the week, and the time. A dinner suggestion must fit the remaining calories and close the protein gap.
+- Protein is the priority in this cut (target ${g.protein} g). Never suggest eating under ~1,700 kcal a day or skipping meals to "make up" for a big day; the plan is a steady moderate deficit, judged over weeks.
+- Weekends run about ${sp?.weekend && sp?.weekday ? sp.weekend - sp.weekday : 250} kcal higher than weekdays for this user; golf days are long walks (~1,000 kcal). Plan around that rather than scolding.
+- Read the scale by the 7-day average and the 4-week rate, never one reading. Water shifts (creatine, new training, salty restaurant meals) hide fat loss for weeks; say so when relevant.
+- Items marked "eyeballed" are ±25% estimates; weighed ones are within a few percent. Mention this only when it changes the advice.
+- Tone: direct, warm, zero moralising. Australian food names and metric units. Answer questions outside food, training and body composition briefly and steer back.
+- Length: usually 2–5 sentences. Use a short list (3–4 lines) only for meal options or a plan. Never pad.
 
-Day: ${ctx.dayName}
-Goals: ${ctx.goals.kcal} kcal, ${ctx.goals.protein}g protein, ${ctx.goals.carbs}g carbs, ${ctx.goals.fat}g fat. Focus: ${ctx.goals.focus}.
-Meals:\n${slotLines}
+TODAY — ${ctx.dayName}, about ${ctx.hour}:00
+Targets: ${g.kcal} kcal · ${g.protein}g P · ${g.carbs}g C · ${g.fat}g F (focus: ${g.focus}). Daily burn setting (excl. exercise): ${g.maintenance || 2000} kcal.
 Eaten so far: ${ctx.eaten.k} kcal · ${ctx.eaten.p}g P · ${ctx.eaten.c}g C · ${ctx.eaten.f}g F
-${ingLines ? `\nUser's saved ingredient facts (personal ground truth — when these foods come up, use these values scaled to the amount discussed):\n${ingLines}\n` : ''}
-Confirm you have context.`;
+LEFT today: ${left.k} kcal · ${left.p}g P · ${left.c}g C · ${left.f}g F
+Exercise today: ${exLines}
+Meals:
+${slotLines}
+
+THIS WEEK (logged days)
+${wk ? `Average ${wk.k} kcal · ${wk.p}g P · ${wk.c}g C · ${wk.f}g F over ${wk.days} day(s)${wk.kPlusMinus ? ` (±${wk.kPlusMinus} kcal/day from eyeballed meals)` : ''}.` : 'No days checked off yet.'}
+${wd ? `Average daily deficit ${Math.round(wd.avgDeficit)} kcal (≈ ${Math.abs(wd.paceKgWk).toFixed(2)} kg/wk pace); avg eaten ${wd.avgEaten}, avg exercise ${wd.avgEx}.` : ''}
+${sp ? `Last 4 weeks: weekdays avg ${sp.weekday ?? '—'} kcal, weekends avg ${sp.weekend ?? '—'} kcal.` : ''}
+
+BODY
+${ws ? `Weight: latest ${+(+ws.current).toFixed(2)} kg, 7-day avg ${ws.avg7 ?? '—'} kg, change since start ${ws.change} kg${ws.recentPerWk != null ? `, last 4 weeks ${ws.recentPerWk > 0 ? '+' : ''}${ws.recentPerWk} kg/wk` : ''}.` : 'No weight logged.'}
+${waist ? `Waist: ${waist.current} cm${waist.change4wk != null ? ` (${waist.change4wk > 0 ? '+' : ''}${waist.change4wk} cm last 4 wks)` : ''}.` : ''}
+Events that shift water weight: ${markerLines}.
+
+USER'S SAVED MEALS (suggest from these first; macros per serving)
+${mealLines || '- none yet'}
+${ingLines ? `\nUSER'S INGREDIENT FACTS (personal ground truth; scale to the amount discussed)\n${ingLines}` : ''}`;
 
   const oaMessages = [
     { role: 'system', content: system },
@@ -375,7 +405,7 @@ Confirm you have context.`;
 
   const res = await fetch(OPENAI_URL, {
     method: 'POST', headers: OPENAI_HEADERS,
-    body: JSON.stringify({ model: OPENAI_MODEL, messages: oaMessages }),
+    body: JSON.stringify({ model: 'gpt-4o', messages: oaMessages, temperature: 0.4 }),
   });
   if (!res.ok) throw new Error(`API ${res.status}`);
   const data = await res.json();

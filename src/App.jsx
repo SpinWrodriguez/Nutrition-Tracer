@@ -392,9 +392,18 @@ export default function App() {
       <Suspense fallback={null}>
       <AiChat dayContext={{
         dayName: meta.name,
+        hour:    new Date().getHours(),
         goals:   app.goals,
         eaten:   eaten,
+        exercise: app.exercise,
         ingredients: app.ingredientsList,
+        savedMeals: app.savedMeals.filter(m => m.kind !== 'ingredient').map(m => ({ n: m.n, k: m.k, p: m.p, c: m.c, f: m.f })),
+        weeklyAvg: app.weeklyAvg,
+        weeklyDeficit: app.weeklyDeficit,
+        wStats: app.wStats,
+        waistStats: app.waistStats,
+        splitAvg: app.splitAvg,
+        markers: app.markers,
         slots:   SLOTS.map(s => ({
           label:   s.label,
           items:   toArr(sel[s.key]).map(v => one(v)).filter(Boolean),
