@@ -19,8 +19,15 @@ export function AiChat({ dayContext }) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  const send = async () => {
-    const text = input.trim();
+  const STARTERS = [
+    'What should I have for dinner?',
+    "How's my week going?",
+    'Am I getting enough protein today?',
+    'Plan tomorrow around golf',
+  ];
+
+  const send = async (preset) => {
+    const text = (typeof preset === 'string' ? preset : input).trim();
     if (!text || loading) return;
     const next = [...messages, { role: 'user', text }];
     setMessages(next);
@@ -40,7 +47,7 @@ export function AiChat({ dayContext }) {
   return (
     <>
       {/* FAB */}
-      <button onClick={() => setOpen(true)} title="AI assistant"
+      <button onClick={() => setOpen(true)} title="Coach chat"
         style={{ position:'fixed', bottom:76, right:16, zIndex:30,
           width:46, height:46, borderRadius:'50%', background:T.accent,
           border:'none', cursor:'pointer', display:'flex', alignItems:'center',
@@ -66,7 +73,7 @@ export function AiChat({ dayContext }) {
               paddingBottom:10, borderBottom:`1px solid ${T.border}` }}>
               <div style={{ display:'flex', alignItems:'center', gap:7 }}>
                 <Sparkles size={15} color={T.gold} />
-                <span style={{ fontSize:14, fontWeight:700, color:T.ink }}>AI Assistant</span>
+                <span style={{ fontSize:14, fontWeight:700, color:T.ink }}>Coach</span>
                 <span style={{ fontSize:11, color:T.faint }}>— {dayContext.dayName}</span>
               </div>
               <div style={{ display:'flex', alignItems:'center', gap:4 }}>
@@ -89,10 +96,20 @@ export function AiChat({ dayContext }) {
           {/* messages */}
           <div style={{ flex:1, overflowY:'auto', padding:'4px 16px 8px' }}>
             {messages.length === 0 && (
-              <p style={{ textAlign:'center', color:T.faint, fontSize:13, padding:'20px 0', lineHeight:1.5 }}>
-                Ask anything about today's meals, macros, or goals.{'\n'}
-                <span style={{ fontSize:12 }}>e.g. "How much Chobani for 40g protein?"</span>
-              </p>
+              <div style={{ padding:'14px 0 6px' }}>
+                <p style={{ textAlign:'center', color:T.faint, fontSize:13, lineHeight:1.5, marginBottom:12 }}>
+                  Your coach sees today's meals, this week's averages, your weight trend and your saved meals.
+                </p>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:6, justifyContent:'center' }}>
+                  {STARTERS.map(q => (
+                    <button key={q} onClick={() => send(q)}
+                      style={{ padding:'7px 12px', borderRadius:20, border:`1px solid ${T.border}`, background:T.bg,
+                        color:T.ink, fontSize:12, fontWeight:600, cursor:'pointer', ...sf }}>
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
             {messages.map((m, i) => (
               <div key={i} style={{ marginBottom:10,
@@ -124,13 +141,13 @@ export function AiChat({ dayContext }) {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
-              placeholder="Ask about meals, protein, calories…"
+              placeholder="Ask your coach…"
               rows={1}
               style={{ flex:1, padding:'9px 13px', borderRadius:13, border:`1.5px solid ${T.border}`,
                 fontSize:14, color:T.ink, background:T.bg, resize:'none', outline:'none',
                 fontFamily:'ui-sans-serif,system-ui,sans-serif', lineHeight:1.4,
                 maxHeight:90, overflowY:'auto' }} />
-            <button onClick={send} disabled={!input.trim() || loading}
+            <button onClick={() => send()} disabled={!input.trim() || loading}
               style={{ width:38, height:38, borderRadius:11, border:'none', flexShrink:0,
                 background: input.trim() && !loading ? T.accent : T.border,
                 cursor: input.trim() && !loading ? 'pointer' : 'default',
