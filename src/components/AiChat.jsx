@@ -21,7 +21,7 @@ export function AiChat({ dayContext }) {
 
   const STARTERS = [
     'What should I have for dinner?',
-    'Be honest: how is my week going?',
+    'How is my week going?',
     'Am I getting enough protein today?',
     'Can I have a treat tonight?',
   ];
