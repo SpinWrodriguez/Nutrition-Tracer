@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { Flame, Dumbbell, TrendingUp, Star, ChevronLeft, ChevronRight, Settings, Compass, RefreshCw } from 'lucide-react';
-import { T, NF, sf, SLOTS, toArr, one, sumSlot, isSkipOnly, getDayMeta, localDateISO, pickItemMeta } from './constants.js';
+import { T, NF, sf, SLOTS, toArr, one, sumSlot, isSkipOnly, getDayMeta, localDateISO, shiftISO, pickItemMeta } from './constants.js';
 import { useAppData } from './hooks/useAppData.js';
 import { useAuth } from './hooks/useAuth.js';
 import { LoginScreen } from './components/LoginScreen.jsx';
@@ -400,6 +400,15 @@ export default function App() {
         savedMeals: app.savedMeals.filter(m => m.kind !== 'ingredient').map(m => ({ n: m.n, k: m.k, p: m.p, c: m.c, f: m.f })),
         weeklyAvg: app.weeklyAvg,
         weeklyDeficit: app.weeklyDeficit,
+        weekDays: app.weeklyNutrition.map(d => ({
+          date: d.date, day: d.day, eaten: d.eaten,
+          exercise: toArr((app.data.exercise || {})[d.date]),
+          checked: Object.values(app.data.checked[d.date] || {}).some(Boolean),
+        })),
+        recentExercise: Object.entries(app.data.exercise || {})
+          .filter(([date, arr]) => arr?.length && date >= shiftISO(todayISO, -14) && date < app.weekStart)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([date, arr]) => ({ date, entries: arr })),
         wStats: app.wStats,
         waistStats: app.waistStats,
         splitAvg: app.splitAvg,
