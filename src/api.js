@@ -361,6 +361,16 @@ export async function aiDayChat(messages, ctx) {
   const left = { k: g.kcal - ctx.eaten.k, p: g.protein - ctx.eaten.p, c: (g.carbs || 0) - ctx.eaten.c, f: (g.fat || 0) - ctx.eaten.f };
   const wk = ctx.weeklyAvg, wd = ctx.weeklyDeficit, ws = ctx.wStats, sp = ctx.splitAvg, waist = ctx.waistStats;
   const exLines = (ctx.exercise || []).map(e => `${e.n} (${e.k} kcal)`).join(', ') || 'none logged';
+  const exK = (ctx.exercise || []).reduce((s, e) => s + (+e.k || 0), 0);
+  const burn = g.maintenance || 2000;
+  const netToday = burn + exK - ctx.eaten.k;
+  const dayRows = (ctx.weekDays || []).map(d => {
+    const ex = d.exercise.reduce((s, e) => s + (+e.k || 0), 0);
+    const exTxt = d.exercise.length ? d.exercise.map(e => `${e.n} ${e.k}`).join(' + ') : '—';
+    if (!d.checked && d.eaten.k === 0) return `${d.day} ${d.date}: not logged${d.exercise.length ? ` · exercise ${exTxt}` : ''}`;
+    return `${d.day} ${d.date}: eaten ${d.eaten.k} kcal / ${d.eaten.p}g P · exercise ${exTxt} · deficit ${burn + ex - d.eaten.k}`;
+  }).join('\n');
+  const histRows = (ctx.recentExercise || []).map(r => `${r.date}: ${r.entries.map(e => `${e.n} ${e.k}`).join(' + ')}`).join('\n');
   const markerLines = (ctx.markers || []).map(m => `${m.date}: ${m.label}`).join('; ') || 'none';
 
   const system = `You are the user's personal coach inside their meal-tracking app: an experienced sports dietitian and strength coach. The user is one adult in Australia who lifts weights, plays golf on weekends, tracks every meal, and is in a deliberate slow cut while keeping muscle. They asked for you to be strict, honest and blunt rather than friendly and agreeable.
@@ -383,10 +393,15 @@ HOW TO READ THE DATA
 TODAY — ${ctx.dayName}, about ${ctx.hour}:00
 Targets: ${g.kcal} kcal · ${g.protein}g P · ${g.carbs}g C · ${g.fat}g F (focus: ${g.focus}). Daily burn setting (excl. exercise): ${g.maintenance || 2000} kcal.
 Eaten so far: ${ctx.eaten.k} kcal · ${ctx.eaten.p}g P · ${ctx.eaten.c}g C · ${ctx.eaten.f}g F
-LEFT today: ${left.k} kcal · ${left.p}g P · ${left.c}g C · ${left.f}g F
-Exercise today: ${exLines}
+LEFT of target today: ${left.k} kcal · ${left.p}g P · ${left.c}g C · ${left.f}g F
+Exercise today: ${exLines}${exK ? ` = ${exK} kcal` : ''}
+NET today so far: ${burn} burn + ${exK} exercise − ${ctx.eaten.k} eaten = ${netToday} kcal ${netToday >= 0 ? 'deficit' : 'surplus'}
 Meals:
 ${slotLines}
+
+THIS WEEK, DAY BY DAY (deficit = burn + exercise − eaten)
+${dayRows || 'nothing logged yet'}
+${histRows ? `\nEXERCISE, THE TWO WEEKS BEFORE THIS ONE\n${histRows}` : ''}
 
 THIS WEEK (logged days)
 ${wk ? `Average ${wk.k} kcal · ${wk.p}g P · ${wk.c}g C · ${wk.f}g F over ${wk.days} day(s)${wk.kPlusMinus ? ` (±${wk.kPlusMinus} kcal/day from eyeballed meals)` : ''}.` : 'No days checked off yet.'}
